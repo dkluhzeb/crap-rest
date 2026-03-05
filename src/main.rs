@@ -36,6 +36,10 @@ struct Cli {
     /// Config file path (optional)
     #[arg(short, long)]
     config: Option<String>,
+
+    /// Serve OpenAPI docs at /api (overrides config file)
+    #[arg(long)]
+    openapi: Option<bool>,
 }
 
 #[tokio::main]
@@ -60,6 +64,9 @@ async fn main() -> anyhow::Result<()> {
     if cli.grpc != "http://localhost:50051" {
         cfg.grpc.address = cli.grpc;
     }
+    if let Some(openapi) = cli.openapi {
+        cfg.openapi.enabled = openapi;
+    }
 
     let client = GrpcClient::new(&cfg.grpc.address)?;
 
@@ -81,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
             .allow_headers(Any)
     };
 
-    let app = handlers::router(client)
+    let app = handlers::router(client, &cfg.openapi)
         .layer(cors)
         .layer(CompressionLayer::new());
 

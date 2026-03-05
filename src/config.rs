@@ -8,6 +8,18 @@ pub struct GatewayConfig {
     pub grpc: GrpcConfig,
     #[serde(default)]
     pub cors: CorsConfig,
+    #[serde(default)]
+    pub openapi: OpenApiConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenApiConfig {
+    #[serde(default = "default_openapi_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_openapi_title")]
+    pub title: String,
+    #[serde(default = "default_openapi_version")]
+    pub version: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,6 +54,25 @@ fn default_grpc_address() -> String {
 fn default_origins() -> Vec<String> {
     vec!["*".to_string()]
 }
+fn default_openapi_enabled() -> bool {
+    true
+}
+fn default_openapi_title() -> String {
+    "Crap CMS REST API".to_string()
+}
+fn default_openapi_version() -> String {
+    "1.0.0".to_string()
+}
+
+impl Default for OpenApiConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_openapi_enabled(),
+            title: default_openapi_title(),
+            version: default_openapi_version(),
+        }
+    }
+}
 
 impl Default for GatewayConfig {
     fn default() -> Self {
@@ -49,6 +80,7 @@ impl Default for GatewayConfig {
             server: ServerConfig::default(),
             grpc: GrpcConfig::default(),
             cors: CorsConfig::default(),
+            openapi: OpenApiConfig::default(),
         }
     }
 }
