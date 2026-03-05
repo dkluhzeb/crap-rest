@@ -1,0 +1,368 @@
+syntax = "proto3";
+
+package crap;
+
+import "google/protobuf/struct.proto";
+
+service ContentAPI {
+  rpc Find (FindRequest) returns (FindResponse);
+  rpc FindByID (FindByIDRequest) returns (FindByIDResponse);
+  rpc Create (CreateRequest) returns (CreateResponse);
+  rpc Update (UpdateRequest) returns (UpdateResponse);
+  rpc Delete (DeleteRequest) returns (DeleteResponse);
+  rpc GetGlobal (GetGlobalRequest) returns (GetGlobalResponse);
+  rpc UpdateGlobal (UpdateGlobalRequest) returns (UpdateGlobalResponse);
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc Me (MeRequest) returns (MeResponse);
+  rpc ForgotPassword (ForgotPasswordRequest) returns (ForgotPasswordResponse);
+  rpc ResetPassword (ResetPasswordRequest) returns (ResetPasswordResponse);
+  rpc VerifyEmail (VerifyEmailRequest) returns (VerifyEmailResponse);
+  rpc ListCollections (ListCollectionsRequest) returns (ListCollectionsResponse);
+  rpc DescribeCollection (DescribeCollectionRequest) returns (DescribeCollectionResponse);
+  rpc Count (CountRequest) returns (CountResponse);
+  rpc UpdateMany (UpdateManyRequest) returns (UpdateManyResponse);
+  rpc DeleteMany (DeleteManyRequest) returns (DeleteManyResponse);
+  rpc Subscribe (SubscribeRequest) returns (stream MutationEvent);
+  rpc ListVersions (ListVersionsRequest) returns (ListVersionsResponse);
+  rpc RestoreVersion (RestoreVersionRequest) returns (RestoreVersionResponse);
+  rpc ListJobs (ListJobsRequest) returns (ListJobsResponse);
+  rpc TriggerJob (TriggerJobRequest) returns (TriggerJobResponse);
+  rpc GetJobRun (GetJobRunRequest) returns (GetJobRunResponse);
+  rpc ListJobRuns (ListJobRunsRequest) returns (ListJobRunsResponse);
+}
+
+message FindRequest {
+  string collection = 1;
+  optional string where = 2;
+  optional string order_by = 3;
+  optional int64 limit = 4;
+  optional int64 offset = 5;
+  optional int32 depth = 6;
+  optional string locale = 7;
+  repeated string select = 8;
+  optional bool draft = 9;
+}
+
+message FindResponse {
+  repeated Document documents = 1;
+  int64 total = 2;
+}
+
+message FindByIDRequest {
+  string collection = 1;
+  string id = 2;
+  optional int32 depth = 3;
+  optional string locale = 4;
+  repeated string select = 5;
+  optional bool draft = 6;
+}
+
+message FindByIDResponse {
+  optional Document document = 1;
+}
+
+message CreateRequest {
+  string collection = 1;
+  google.protobuf.Struct data = 2;
+  optional string locale = 3;
+  optional bool draft = 4;
+}
+
+message CreateResponse {
+  Document document = 1;
+}
+
+message UpdateRequest {
+  string collection = 1;
+  string id = 2;
+  google.protobuf.Struct data = 3;
+  optional string locale = 4;
+  optional bool draft = 5;
+  optional bool unpublish = 6;
+}
+
+message UpdateResponse {
+  Document document = 1;
+}
+
+message DeleteRequest {
+  string collection = 1;
+  string id = 2;
+}
+
+message DeleteResponse {
+  bool success = 1;
+}
+
+message GetGlobalRequest {
+  string slug = 1;
+  optional string locale = 2;
+}
+
+message GetGlobalResponse {
+  Document document = 1;
+}
+
+message UpdateGlobalRequest {
+  string slug = 1;
+  google.protobuf.Struct data = 2;
+  optional string locale = 3;
+}
+
+message UpdateGlobalResponse {
+  Document document = 1;
+}
+
+message LoginRequest {
+  string collection = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message LoginResponse {
+  string token = 1;
+  Document user = 2;
+}
+
+message MeRequest {
+  string token = 1;
+}
+
+message MeResponse {
+  Document user = 1;
+}
+
+message ForgotPasswordRequest {
+  string collection = 1;
+  string email = 2;
+}
+
+message ForgotPasswordResponse {
+  bool success = 1;
+}
+
+message ResetPasswordRequest {
+  string collection = 1;
+  string token = 2;
+  string new_password = 3;
+}
+
+message ResetPasswordResponse {
+  bool success = 1;
+}
+
+message VerifyEmailRequest {
+  string collection = 1;
+  string token = 2;
+}
+
+message VerifyEmailResponse {
+  bool success = 1;
+}
+
+message CountRequest {
+  string collection = 1;
+  optional string where = 2;
+  optional string locale = 3;
+  optional bool draft = 4;
+}
+
+message CountResponse {
+  int64 count = 1;
+}
+
+message UpdateManyRequest {
+  string collection = 1;
+  optional string where = 2;
+  google.protobuf.Struct data = 3;
+  optional string locale = 4;
+  optional bool draft = 5;
+}
+
+message UpdateManyResponse {
+  int64 modified = 1;
+}
+
+message DeleteManyRequest {
+  string collection = 1;
+  optional string where = 2;
+}
+
+message DeleteManyResponse {
+  int64 deleted = 1;
+}
+
+message Document {
+  string id = 1;
+  string collection = 2;
+  google.protobuf.Struct fields = 3;
+  optional string created_at = 4;
+  optional string updated_at = 5;
+}
+
+message ListCollectionsRequest {}
+
+message ListCollectionsResponse {
+  repeated CollectionInfo collections = 1;
+  repeated GlobalInfo globals = 2;
+}
+
+message CollectionInfo {
+  string slug = 1;
+  optional string singular_label = 2;
+  optional string plural_label = 3;
+  bool timestamps = 4;
+  bool auth = 5;
+  bool upload = 6;
+}
+
+message GlobalInfo {
+  string slug = 1;
+  optional string singular_label = 2;
+  optional string plural_label = 3;
+}
+
+message DescribeCollectionRequest {
+  string slug = 1;
+  bool is_global = 2;
+}
+
+message DescribeCollectionResponse {
+  string slug = 1;
+  optional string singular_label = 2;
+  optional string plural_label = 3;
+  bool timestamps = 4;
+  bool auth = 5;
+  repeated FieldInfo fields = 6;
+  bool upload = 7;
+  bool drafts = 8;
+}
+
+message FieldInfo {
+  string name = 1;
+  string type = 2;
+  bool required = 3;
+  bool unique = 4;
+  optional string relationship_collection = 5;
+  optional bool relationship_has_many = 6;
+  repeated SelectOptionInfo options = 7;
+  repeated FieldInfo fields = 8;
+  optional int32 relationship_max_depth = 9;
+  repeated BlockInfo blocks = 10;
+  bool localized = 11;
+}
+
+message BlockInfo {
+  string block_type = 1;
+  optional string label = 2;
+  repeated FieldInfo fields = 3;
+  optional string group = 4;
+  optional string image_url = 5;
+}
+
+message SelectOptionInfo {
+  string label = 1;
+  string value = 2;
+}
+
+message SubscribeRequest {
+  repeated string collections = 1;
+  repeated string globals = 2;
+  repeated string operations = 3;
+  string token = 4;
+}
+
+message MutationEvent {
+  uint64 sequence = 1;
+  string timestamp = 2;
+  string target = 3;
+  string operation = 4;
+  string collection = 5;
+  string document_id = 6;
+  google.protobuf.Struct data = 7;
+}
+
+message ListVersionsRequest {
+  string collection = 1;
+  string id = 2;
+  optional int64 limit = 3;
+}
+
+message ListVersionsResponse {
+  repeated VersionInfo versions = 1;
+}
+
+message VersionInfo {
+  string id = 1;
+  int64 version = 2;
+  string status = 3;
+  bool latest = 4;
+  string created_at = 5;
+}
+
+message RestoreVersionRequest {
+  string collection = 1;
+  string document_id = 2;
+  string version_id = 3;
+}
+
+message RestoreVersionResponse {
+  Document document = 1;
+}
+
+message ListJobsRequest {}
+
+message ListJobsResponse {
+  repeated JobDefinitionInfo jobs = 1;
+}
+
+message JobDefinitionInfo {
+  string slug = 1;
+  string handler = 2;
+  optional string schedule = 3;
+  string queue = 4;
+  uint32 retries = 5;
+  uint64 timeout = 6;
+  uint32 concurrency = 7;
+  bool skip_if_running = 8;
+  optional string label = 9;
+}
+
+message TriggerJobRequest {
+  string slug = 1;
+  optional string data_json = 2;
+}
+
+message TriggerJobResponse {
+  string job_id = 1;
+}
+
+message GetJobRunRequest {
+  string id = 1;
+}
+
+message GetJobRunResponse {
+  string id = 1;
+  string slug = 2;
+  string status = 3;
+  string data_json = 4;
+  optional string result_json = 5;
+  optional string error = 6;
+  uint32 attempt = 7;
+  uint32 max_attempts = 8;
+  optional string scheduled_by = 9;
+  optional string created_at = 10;
+  optional string started_at = 11;
+  optional string completed_at = 12;
+}
+
+message ListJobRunsRequest {
+  optional string slug = 1;
+  optional string status = 2;
+  optional int64 limit = 3;
+  optional int64 offset = 4;
+}
+
+message ListJobRunsResponse {
+  repeated GetJobRunResponse runs = 1;
+}

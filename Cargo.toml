@@ -1,0 +1,38 @@
+[package]
+name = "crap-rest"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "crap-rest"
+path = "src/main.rs"
+
+[dependencies]
+# Web framework
+axum = { version = "0.8", features = ["json", "macros", "query"] }
+tower-http = { version = "0.6", features = ["cors", "compression-gzip", "compression-br"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+
+# gRPC client
+tonic = "0.14"
+tonic-prost = "0.14"
+prost = "0.14"
+prost-types = "0.14"
+
+# Config & CLI
+clap = { version = "4", features = ["derive"] }
+toml = "1.0"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilities
+anyhow = "1"
+
+[build-dependencies]
+tonic-prost-build = "0.14"
