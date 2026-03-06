@@ -17,11 +17,13 @@ pub struct FindParams {
     pub r#where: Option<String>,
     pub order_by: Option<String>,
     pub limit: Option<i64>,
-    pub offset: Option<i64>,
+    pub page: Option<i64>,
     pub depth: Option<i32>,
     pub locale: Option<String>,
     pub select: Option<String>,
     pub draft: Option<bool>,
+    pub after_cursor: Option<String>,
+    pub before_cursor: Option<String>,
 }
 
 fn make_request<T>(headers: &HeaderMap, msg: T) -> tonic::Request<T> {
@@ -66,20 +68,51 @@ async fn find(
             r#where: params.r#where,
             order_by: params.order_by,
             limit: params.limit,
-            offset: params.offset,
+            page: params.page,
             depth: params.depth,
             locale: params.locale,
             select,
             draft: params.draft,
+            after_cursor: params.after_cursor,
+            before_cursor: params.before_cursor,
         },
     );
 
     let resp = client.client().find(req).await?.into_inner();
     let docs: Vec<Value> = resp.documents.iter().map(document_to_json).collect();
+    let pg = resp.pagination.unwrap_or_default();
+
+    let mut pagination = serde_json::json!({
+        "totalDocs": pg.total_docs,
+        "limit": pg.limit,
+        "hasPrevPage": pg.has_prev_page,
+        "hasNextPage": pg.has_next_page,
+    });
+    if let Some(tp) = pg.total_pages {
+        pagination["totalPages"] = serde_json::json!(tp);
+    }
+    if let Some(p) = pg.page {
+        pagination["page"] = serde_json::json!(p);
+    }
+    if let Some(ps) = pg.page_start {
+        pagination["pageStart"] = serde_json::json!(ps);
+    }
+    if let Some(prev) = pg.prev_page {
+        pagination["prevPage"] = serde_json::json!(prev);
+    }
+    if let Some(next) = pg.next_page {
+        pagination["nextPage"] = serde_json::json!(next);
+    }
+    if let Some(ref sc) = pg.start_cursor {
+        pagination["startCursor"] = serde_json::json!(sc);
+    }
+    if let Some(ref ec) = pg.end_cursor {
+        pagination["endCursor"] = serde_json::json!(ec);
+    }
 
     Ok(Json(serde_json::json!({
         "docs": docs,
-        "total": resp.total,
+        "pagination": pagination,
     })))
 }
 
@@ -145,7 +178,10 @@ async fn create(
         proto::CreateRequest {
             collection: slug,
             data,
-            locale: body.get("_locale").and_then(|v| v.as_str()).map(String::from),
+            locale: body
+                .get("_locale")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             draft: body.get("_draft").and_then(|v| v.as_bool()),
         },
     );
@@ -170,7 +206,10 @@ async fn update(
             collection: slug,
             id,
             data,
-            locale: body.get("_locale").and_then(|v| v.as_str()).map(String::from),
+            locale: body
+                .get("_locale")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             draft: body.get("_draft").and_then(|v| v.as_bool()),
             unpublish: body.get("_unpublish").and_then(|v| v.as_bool()),
         },
@@ -206,12 +245,12 @@ async fn update_many(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> RestResult<Json<Value>> {
-    let where_clause = body
-        .get("where")
-        .and_then(|v| v.as_str())
-        .map(String::from);
+    let where_clause = body.get("where").and_then(|v| v.as_str()).map(String::from);
 
-    let data_val = body.get("data").cloned().unwrap_or(Value::Object(Default::default()));
+    let data_val = body
+        .get("data")
+        .cloned()
+        .unwrap_or(Value::Object(Default::default()));
     let data = json_to_struct(&data_val);
 
     let req = make_request(
@@ -220,7 +259,10 @@ async fn update_many(
             collection: slug,
             r#where: where_clause,
             data,
-            locale: body.get("locale").and_then(|v| v.as_str()).map(String::from),
+            locale: body
+                .get("locale")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             draft: body.get("draft").and_then(|v| v.as_bool()),
         },
     );
@@ -235,10 +277,7 @@ async fn delete_many(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> RestResult<Json<Value>> {
-    let where_clause = body
-        .get("where")
-        .and_then(|v| v.as_str())
-        .map(String::from);
+    let where_clause = body.get("where").and_then(|v| v.as_str()).map(String::from);
 
     let req = make_request(
         &headers,

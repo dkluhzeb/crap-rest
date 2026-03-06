@@ -166,7 +166,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
                                         "type": "object",
                                         "properties": {
                                             "docs": { "type": "array", "items": schema_ref },
-                                            "total": { "type": "integer" }
+                                            "pagination": { "$ref": "#/components/schemas/PaginationInfo" }
                                         }
                                     }
                                 }
@@ -702,6 +702,26 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
 
     // Add shared schemas
     schemas.insert(
+        "PaginationInfo".to_string(),
+        json!({
+            "type": "object",
+            "properties": {
+                "totalDocs": { "type": "integer", "description": "Total matching documents" },
+                "limit": { "type": "integer", "description": "Applied page size" },
+                "totalPages": { "type": "integer", "description": "Total pages" },
+                "page": { "type": "integer", "description": "Current page (1-based)" },
+                "pageStart": { "type": "integer", "description": "1-based index of first doc on current page" },
+                "hasPrevPage": { "type": "boolean", "description": "Whether a previous page exists" },
+                "hasNextPage": { "type": "boolean", "description": "Whether a next page exists" },
+                "prevPage": { "type": "integer", "description": "Previous page number" },
+                "nextPage": { "type": "integer", "description": "Next page number" },
+                "startCursor": { "type": "string", "description": "Opaque cursor of first doc in results (cursor mode)" },
+                "endCursor": { "type": "string", "description": "Opaque cursor of last doc in results (cursor mode)" }
+            },
+            "required": ["totalDocs", "limit", "hasPrevPage", "hasNextPage"]
+        }),
+    );
+    schemas.insert(
         "VersionInfo".to_string(),
         json!({
             "type": "object",
@@ -749,11 +769,13 @@ fn find_query_params() -> Value {
         { "name": "where", "in": "query", "schema": { "type": "string" }, "description": "JSON filter expression" },
         { "name": "order_by", "in": "query", "schema": { "type": "string" }, "description": "Sort expression" },
         { "name": "limit", "in": "query", "schema": { "type": "integer" } },
-        { "name": "offset", "in": "query", "schema": { "type": "integer" } },
+        { "name": "page", "in": "query", "schema": { "type": "integer" }, "description": "Page number (1-based)" },
         { "name": "depth", "in": "query", "schema": { "type": "integer" }, "description": "Relationship population depth" },
         { "name": "locale", "in": "query", "schema": { "type": "string" } },
         { "name": "select", "in": "query", "schema": { "type": "string" }, "description": "Comma-separated field names" },
-        { "name": "draft", "in": "query", "schema": { "type": "boolean" } }
+        { "name": "draft", "in": "query", "schema": { "type": "boolean" } },
+        { "name": "after_cursor", "in": "query", "schema": { "type": "string" }, "description": "Opaque forward cursor for keyset pagination" },
+        { "name": "before_cursor", "in": "query", "schema": { "type": "string" }, "description": "Opaque backward cursor for keyset pagination" }
     ])
 }
 

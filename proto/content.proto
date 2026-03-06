@@ -36,16 +36,32 @@ message FindRequest {
   optional string where = 2;
   optional string order_by = 3;
   optional int64 limit = 4;
-  optional int64 offset = 5;
+  optional int64 page = 5;
   optional int32 depth = 6;
   optional string locale = 7;
   repeated string select = 8;
   optional bool draft = 9;
+  optional string after_cursor = 10;
+  optional string before_cursor = 11;
+}
+
+message PaginationInfo {
+  int64 total_docs = 1;
+  int64 limit = 2;
+  optional int64 total_pages = 3;
+  optional int64 page = 4;
+  optional int64 page_start = 5;
+  bool has_prev_page = 6;
+  bool has_next_page = 7;
+  optional int64 prev_page = 8;
+  optional int64 next_page = 9;
+  optional string start_cursor = 10;
+  optional string end_cursor = 11;
 }
 
 message FindResponse {
   repeated Document documents = 1;
-  int64 total = 2;
+  PaginationInfo pagination = 2;
 }
 
 message FindByIDRequest {
