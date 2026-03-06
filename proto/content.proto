@@ -43,6 +43,7 @@ message FindRequest {
   optional bool draft = 9;
   optional string after_cursor = 10;
   optional string before_cursor = 11;
+  optional string search = 12;
 }
 
 message PaginationInfo {
@@ -181,6 +182,7 @@ message CountRequest {
   optional string where = 2;
   optional string locale = 3;
   optional bool draft = 4;
+  optional string search = 5;
 }
 
 message CountResponse {

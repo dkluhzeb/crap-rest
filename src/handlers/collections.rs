@@ -24,6 +24,7 @@ pub struct FindParams {
     pub draft: Option<bool>,
     pub after_cursor: Option<String>,
     pub before_cursor: Option<String>,
+    pub search: Option<String>,
 }
 
 fn make_request<T>(headers: &HeaderMap, msg: T) -> tonic::Request<T> {
@@ -75,6 +76,7 @@ async fn find(
             draft: params.draft,
             after_cursor: params.after_cursor,
             before_cursor: params.before_cursor,
+            search: params.search.clone(),
         },
     );
 
@@ -129,6 +131,7 @@ async fn count(
             r#where: params.r#where,
             locale: params.locale,
             draft: params.draft,
+            search: params.search,
         },
     );
 

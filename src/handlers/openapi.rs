@@ -282,7 +282,8 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
                     "parameters": [
                         { "name": "where", "in": "query", "schema": { "type": "string" }, "description": "JSON filter" },
                         { "name": "locale", "in": "query", "schema": { "type": "string" } },
-                        { "name": "draft", "in": "query", "schema": { "type": "boolean" } }
+                        { "name": "draft", "in": "query", "schema": { "type": "boolean" } },
+                        { "name": "search", "in": "query", "schema": { "type": "string" }, "description": "FTS5 full-text search query" }
                     ],
                     "responses": {
                         "200": {
@@ -775,7 +776,8 @@ fn find_query_params() -> Value {
         { "name": "select", "in": "query", "schema": { "type": "string" }, "description": "Comma-separated field names" },
         { "name": "draft", "in": "query", "schema": { "type": "boolean" } },
         { "name": "after_cursor", "in": "query", "schema": { "type": "string" }, "description": "Opaque forward cursor for keyset pagination" },
-        { "name": "before_cursor", "in": "query", "schema": { "type": "string" }, "description": "Opaque backward cursor for keyset pagination" }
+        { "name": "before_cursor", "in": "query", "schema": { "type": "string" }, "description": "Opaque backward cursor for keyset pagination" },
+        { "name": "search", "in": "query", "schema": { "type": "string" }, "description": "FTS5 full-text search query" }
     ])
 }
 
