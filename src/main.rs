@@ -45,7 +45,9 @@ struct Cli {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -92,7 +94,11 @@ async fn main() -> anyhow::Result<()> {
         .layer(cors)
         .layer(CompressionLayer::new());
 
-    let host: IpAddr = cfg.server.host.parse().unwrap_or(std::net::Ipv6Addr::UNSPECIFIED.into());
+    let host: IpAddr = cfg
+        .server
+        .host
+        .parse()
+        .unwrap_or(std::net::Ipv6Addr::UNSPECIFIED.into());
     let addr = SocketAddr::from((host, cfg.server.port));
     let listener = TcpListener::bind(addr).await?;
     tracing::info!("crap-rest listening on {}", addr);

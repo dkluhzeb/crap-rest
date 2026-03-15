@@ -11,17 +11,7 @@ use crate::client::GrpcClient;
 use crate::error::RestResult;
 use crate::proto;
 
-fn make_request<T>(headers: &HeaderMap, msg: T) -> tonic::Request<T> {
-    let mut req = tonic::Request::new(msg);
-    if let Some(auth) = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse().ok())
-    {
-        req.metadata_mut().insert("authorization", auth);
-    }
-    req
-}
+use super::make_request;
 
 pub fn routes() -> Router<GrpcClient> {
     Router::new()
@@ -71,10 +61,7 @@ async fn trigger_job(
     Json(body): Json<TriggerBody>,
 ) -> RestResult<Json<Value>> {
     let data_json = body.data.map(|v| v.to_string());
-    let req = make_request(
-        &headers,
-        proto::TriggerJobRequest { slug, data_json },
-    );
+    let req = make_request(&headers, proto::TriggerJobRequest { slug, data_json });
 
     let resp = client.client().trigger_job(req).await?.into_inner();
     Ok(Json(serde_json::json!({ "job_id": resp.job_id })))

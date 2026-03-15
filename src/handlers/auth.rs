@@ -12,17 +12,7 @@ use crate::convert::document_to_json;
 use crate::error::RestResult;
 use crate::proto;
 
-fn make_request<T>(headers: &HeaderMap, msg: T) -> tonic::Request<T> {
-    let mut req = tonic::Request::new(msg);
-    if let Some(auth) = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse().ok())
-    {
-        req.metadata_mut().insert("authorization", auth);
-    }
-    req
-}
+use super::make_request;
 
 pub fn routes() -> Router<GrpcClient> {
     Router::new()
@@ -36,10 +26,7 @@ pub fn routes() -> Router<GrpcClient> {
             "/api/auth/{collection}/reset-password",
             post(reset_password),
         )
-        .route(
-            "/api/auth/{collection}/verify-email",
-            post(verify_email),
-        )
+        .route("/api/auth/{collection}/verify-email", post(verify_email))
 }
 
 #[derive(Deserialize)]
@@ -68,18 +55,8 @@ async fn login(
     })))
 }
 
-async fn me(
-    State(client): State<GrpcClient>,
-    headers: HeaderMap,
-) -> RestResult<Json<Value>> {
-    let token = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.strip_prefix("Bearer ").unwrap_or(v))
-        .unwrap_or("")
-        .to_string();
-
-    let req = tonic::Request::new(proto::MeRequest { token });
+async fn me(State(client): State<GrpcClient>, headers: HeaderMap) -> RestResult<Json<Value>> {
+    let req = make_request(&headers, proto::MeRequest::default());
     let resp = client.client().me(req).await?.into_inner();
 
     match resp.user {

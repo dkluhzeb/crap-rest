@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct GatewayConfig {
     #[serde(default)]
     pub server: ServerConfig,
@@ -70,17 +70,6 @@ impl Default for OpenApiConfig {
             enabled: default_openapi_enabled(),
             title: default_openapi_title(),
             version: default_openapi_version(),
-        }
-    }
-}
-
-impl Default for GatewayConfig {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            grpc: GrpcConfig::default(),
-            cors: CorsConfig::default(),
-            openapi: OpenApiConfig::default(),
         }
     }
 }

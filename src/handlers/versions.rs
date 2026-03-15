@@ -12,17 +12,7 @@ use crate::convert::document_to_json;
 use crate::error::RestResult;
 use crate::proto;
 
-fn make_request<T>(headers: &HeaderMap, msg: T) -> tonic::Request<T> {
-    let mut req = tonic::Request::new(msg);
-    if let Some(auth) = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse().ok())
-    {
-        req.metadata_mut().insert("authorization", auth);
-    }
-    req
-}
+use super::make_request;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct VersionParams {
@@ -31,10 +21,7 @@ pub struct VersionParams {
 
 pub fn routes() -> Router<GrpcClient> {
     Router::new()
-        .route(
-            "/api/collections/{slug}/{id}/versions",
-            get(list_versions),
-        )
+        .route("/api/collections/{slug}/{id}/versions", get(list_versions))
         .route(
             "/api/collections/{slug}/{id}/versions/{vid}/restore",
             post(restore_version),

@@ -12,21 +12,11 @@ use crate::convert::{document_to_json, json_to_struct};
 use crate::error::RestResult;
 use crate::proto;
 
+use super::make_request;
+
 #[derive(Debug, Deserialize, Default)]
 pub struct GlobalParams {
     pub locale: Option<String>,
-}
-
-fn make_request<T>(headers: &HeaderMap, msg: T) -> tonic::Request<T> {
-    let mut req = tonic::Request::new(msg);
-    if let Some(auth) = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse().ok())
-    {
-        req.metadata_mut().insert("authorization", auth);
-    }
-    req
 }
 
 pub fn routes() -> Router<GrpcClient> {
@@ -68,7 +58,10 @@ async fn update_global(
         proto::UpdateGlobalRequest {
             slug,
             data,
-            locale: body.get("_locale").and_then(|v| v.as_str()).map(String::from),
+            locale: body
+                .get("_locale")
+                .and_then(|v| v.as_str())
+                .map(String::from),
         },
     );
 

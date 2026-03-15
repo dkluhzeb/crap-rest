@@ -125,14 +125,8 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
         };
 
         let slug = &info.slug;
-        let label = info
-            .singular_label
-            .as_deref()
-            .unwrap_or(slug);
-        let plural = info
-            .plural_label
-            .as_deref()
-            .unwrap_or(slug);
+        let label = info.singular_label.as_deref().unwrap_or(slug);
+        let plural = info.plural_label.as_deref().unwrap_or(slug);
 
         // Build schema for this collection
         let schema_name = capitalize(slug);
@@ -647,10 +641,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
         };
 
         let slug = &info.slug;
-        let label = info
-            .singular_label
-            .as_deref()
-            .unwrap_or(slug);
+        let label = info.singular_label.as_deref().unwrap_or(slug);
 
         let schema_name = format!("Global{}", capitalize(slug));
         let schema = build_input_schema(&desc.fields);
@@ -798,10 +789,7 @@ fn field_to_json_schema(f: &proto::FieldInfo) -> Value {
         }
         "relationship" | "upload" => {
             let has_many = f.relationship_has_many.unwrap_or(false);
-            let collection = f
-                .relationship_collection
-                .as_deref()
-                .unwrap_or("unknown");
+            let collection = f.relationship_collection.as_deref().unwrap_or("unknown");
             if has_many {
                 json!({
                     "type": "array",
@@ -848,10 +836,7 @@ fn field_to_json_schema(f: &proto::FieldInfo) -> Value {
                     for sub in &b.fields {
                         props.insert(sub.name.clone(), field_to_json_schema(sub));
                     }
-                    let label = b
-                        .label
-                        .as_deref()
-                        .unwrap_or(&b.block_type);
+                    let label = b.label.as_deref().unwrap_or(&b.block_type);
                     json!({
                         "type": "object",
                         "title": label,

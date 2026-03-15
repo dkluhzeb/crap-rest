@@ -16,9 +16,7 @@ pub fn routes() -> Router<GrpcClient> {
         .route("/api/schema/globals/{slug}", get(describe_global))
 }
 
-async fn list_collections(
-    State(client): State<GrpcClient>,
-) -> RestResult<Json<Value>> {
+async fn list_collections(State(client): State<GrpcClient>) -> RestResult<Json<Value>> {
     let req = tonic::Request::new(proto::ListCollectionsRequest {});
     let resp = client.client().list_collections(req).await?.into_inner();
 
