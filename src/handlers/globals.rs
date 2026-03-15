@@ -12,14 +12,14 @@ use crate::convert::{document_to_json, json_to_struct};
 use crate::error::RestResult;
 use crate::proto;
 
-use super::make_request;
+use super::{AppState, make_request};
 
 #[derive(Debug, Deserialize, Default)]
 pub struct GlobalParams {
     pub locale: Option<String>,
 }
 
-pub fn routes() -> Router<GrpcClient> {
+pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/globals/{slug}", get(get_global))
         .route("/api/globals/{slug}", patch(update_global))

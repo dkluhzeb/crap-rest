@@ -9,7 +9,9 @@ use crate::client::GrpcClient;
 use crate::error::RestResult;
 use crate::proto;
 
-pub fn routes() -> Router<GrpcClient> {
+use super::AppState;
+
+pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/schema", get(list_collections))
         .route("/api/schema/collections/{slug}", get(describe_collection))

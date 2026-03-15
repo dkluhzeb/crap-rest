@@ -21,6 +21,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::client::GrpcClient;
 use crate::config::GatewayConfig;
+use crate::handlers::{AppState, ProxyState};
 
 #[derive(Parser)]
 #[command(name = "crap-rest", about = "REST gateway for Crap CMS gRPC API")]
@@ -40,6 +41,14 @@ struct Cli {
     /// Serve OpenAPI docs at /api (overrides config file)
     #[arg(long)]
     openapi: Option<bool>,
+
+    /// Enable upload/file proxy to CMS HTTP server
+    #[arg(long)]
+    proxy: bool,
+
+    /// CMS HTTP address for proxy (default: http://localhost:3000)
+    #[arg(long)]
+    cms_url: Option<String>,
 }
 
 #[tokio::main]
@@ -69,8 +78,31 @@ async fn main() -> anyhow::Result<()> {
     if let Some(openapi) = cli.openapi {
         cfg.openapi.enabled = openapi;
     }
+    if cli.proxy {
+        cfg.proxy.enabled = true;
+    }
+    if let Some(url) = cli.cms_url {
+        cfg.proxy.cms_url = url;
+        cfg.proxy.enabled = true;
+    }
 
     let client = GrpcClient::new(&cfg.grpc.address)?;
+
+    let proxy = if cfg.proxy.enabled {
+        tracing::info!("upload proxy enabled → {}", cfg.proxy.cms_url);
+        Some(ProxyState {
+            client: reqwest::Client::new(),
+            cms_url: cfg.proxy.cms_url.clone(),
+        })
+    } else {
+        tracing::info!("upload proxy disabled");
+        None
+    };
+
+    let state = AppState {
+        grpc: client,
+        proxy,
+    };
 
     let cors = if cfg.cors.allowed_origins.iter().any(|o| o == "*") {
         CorsLayer::new()
@@ -90,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
             .allow_headers(Any)
     };
 
-    let app = handlers::router(client, &cfg.openapi)
+    let app = handlers::router(state, &cfg.openapi)
         .layer(cors)
         .layer(CompressionLayer::new());
 

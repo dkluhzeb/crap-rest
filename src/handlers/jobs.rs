@@ -11,9 +11,9 @@ use crate::client::GrpcClient;
 use crate::error::RestResult;
 use crate::proto;
 
-use super::make_request;
+use super::{AppState, make_request};
 
-pub fn routes() -> Router<GrpcClient> {
+pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/jobs", get(list_jobs))
         .route("/api/jobs/{slug}/trigger", post(trigger_job))

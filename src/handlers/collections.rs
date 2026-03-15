@@ -12,7 +12,7 @@ use crate::convert::{document_to_json, json_to_struct};
 use crate::error::RestResult;
 use crate::proto;
 
-use super::make_request;
+use super::{AppState, make_request};
 
 #[derive(Debug, Deserialize, Default)]
 pub struct FindParams {
@@ -29,7 +29,7 @@ pub struct FindParams {
     pub search: Option<String>,
 }
 
-pub fn routes() -> Router<GrpcClient> {
+pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/collections/{slug}", get(find))
         .route("/api/collections/{slug}/count", get(count))

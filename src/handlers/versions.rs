@@ -12,14 +12,14 @@ use crate::convert::document_to_json;
 use crate::error::RestResult;
 use crate::proto;
 
-use super::make_request;
+use super::{AppState, make_request};
 
 #[derive(Debug, Deserialize, Default)]
 pub struct VersionParams {
     pub limit: Option<i64>,
 }
 
-pub fn routes() -> Router<GrpcClient> {
+pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/collections/{slug}/{id}/versions", get(list_versions))
         .route(

@@ -10,6 +10,8 @@ pub struct GatewayConfig {
     pub cors: CorsConfig,
     #[serde(default)]
     pub openapi: OpenApiConfig,
+    #[serde(default)]
+    pub proxy: ProxyConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -97,6 +99,27 @@ impl Default for CorsConfig {
             allowed_origins: default_origins(),
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ProxyConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_cms_url")]
+    pub cms_url: String,
+}
+
+impl Default for ProxyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cms_url: default_cms_url(),
+        }
+    }
+}
+
+fn default_cms_url() -> String {
+    "http://localhost:3000".to_string()
 }
 
 impl GatewayConfig {
