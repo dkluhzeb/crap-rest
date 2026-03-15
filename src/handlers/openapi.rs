@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use axum::{
+    Router,
     extract::State,
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::IntoResponse,
     routing::get,
-    Router,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::client::GrpcClient;
 use crate::config::OpenApiConfig;

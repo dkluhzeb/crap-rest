@@ -6,7 +6,7 @@ pub mod openapi;
 mod schema;
 mod versions;
 
-use axum::{http::HeaderMap, Router};
+use axum::{Router, http::HeaderMap};
 
 use crate::client::GrpcClient;
 use crate::config::OpenApiConfig;
