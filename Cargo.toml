@@ -1,7 +1,15 @@
 [package]
 name = "crap-rest"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 edition = "2024"
+description = "RESTful JSON gateway for Crap CMS — proxies HTTP to gRPC"
+license = "MIT"
+repository = "https://github.com/dkluhzeb/crap-rest"
+homepage = "https://github.com/dkluhzeb/crap-rest"
+authors = ["dkluhzeb"]
+keywords = ["cms", "rest", "gateway", "grpc", "proxy"]
+categories = ["web-programming"]
+readme = "README.md"
 
 [[bin]]
 name = "crap-rest"

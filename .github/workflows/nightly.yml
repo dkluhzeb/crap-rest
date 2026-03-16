@@ -1,0 +1,64 @@
+name: Nightly
+
+on:
+  push:
+    branches: [master]
+    tags-ignore: ["**"]
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build x86_64 musl
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build
+        run: cross build --release --target x86_64-unknown-linux-musl
+
+      - name: Rename binary
+        run: cp target/x86_64-unknown-linux-musl/release/crap-rest crap-rest-linux-x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crap-rest-linux-x86_64
+          path: crap-rest-linux-x86_64
+
+  docker:
+    name: Docker nightly
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: crap-rest-linux-x86_64
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: BINARY=crap-rest-linux-x86_64
+          tags: |
+            ghcr.io/dkluhzeb/crap-rest:nightly
+            ghcr.io/dkluhzeb/crap-rest:sha-${{ github.sha }}

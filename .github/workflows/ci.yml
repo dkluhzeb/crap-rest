@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags-ignore: ["**"]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: fmt + clippy + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+          sudo apt-get clean
+
+      - uses: actions/checkout@v4
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-registry-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace

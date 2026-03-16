@@ -1,6 +1,10 @@
 # crap-rest
 
-RESTful JSON gateway for [Crap CMS](https://github.com/your-org/crap-cms). Connects to the gRPC API as a client and re-exposes every RPC as a standard REST endpoint.
+[![CI](https://github.com/dkluhzeb/crap-rest/actions/workflows/ci.yml/badge.svg)](https://github.com/dkluhzeb/crap-rest/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://ghcr.io/dkluhzeb/crap-rest)
+
+RESTful JSON gateway for [Crap CMS](https://github.com/dkluhzeb/crap-cms). Connects to the gRPC API as a client and re-exposes every RPC as a standard REST endpoint.
 
 Separate binary, zero config required. Start it alongside `crap-cms serve` and talk JSON over HTTP instead of protobuf over gRPC.
 
@@ -24,10 +28,13 @@ cd ../crap-cms && cargo run -- serve ./example
 crap-rest [OPTIONS]
 
 Options:
-  -p, --port <PORT>    Listen port [default: 8080]
-  -g, --grpc <ADDR>    gRPC server address [default: http://localhost:50051]
-  -c, --config <FILE>  Config file path (optional)
-  -h, --help           Print help
+  -p, --port <PORT>       Listen port [default: 8080]
+  -g, --grpc <ADDR>       gRPC server address [default: http://localhost:50051]
+  -c, --config <FILE>     Config file path (optional)
+      --openapi <BOOL>    Serve OpenAPI docs at / [default: true]
+      --proxy             Enable upload/file proxy to CMS HTTP server
+      --cms-url <URL>     CMS HTTP address for proxy [default: http://localhost:3000]
+  -h, --help              Print help
 ```
 
 Examples:
@@ -41,6 +48,12 @@ crap-rest -g http://192.168.1.10:50051
 
 # With config file
 crap-rest -c crap-rest.toml
+
+# Enable upload proxy (forwards file uploads to CMS HTTP server)
+crap-rest --proxy --cms-url http://localhost:3000
+
+# Disable OpenAPI docs
+crap-rest --openapi false
 ```
 
 ## Config File
@@ -50,7 +63,7 @@ Optional TOML file. CLI flags override config values.
 ```toml
 [server]
 port = 8080
-host = "0.0.0.0"
+host = "::"
 
 [grpc]
 address = "http://localhost:50051"
@@ -59,6 +72,15 @@ address = "http://localhost:50051"
 allowed_origins = ["*"]
 # Or restrict:
 # allowed_origins = ["https://myapp.com", "http://localhost:3000"]
+
+[openapi]
+enabled = true
+title = "Crap CMS REST API"
+version = "1.0.0"
+
+[proxy]
+enabled = false
+cms_url = "http://localhost:3000"
 ```
 
 ## Logging
@@ -460,7 +482,7 @@ All errors return JSON with an appropriate HTTP status:
 ## Architecture
 
 ```
-Browser/App ──HTTP/JSON──▶ crap-rest ──gRPC──▶ crap-cms
+Browser/App - HTTP/JSON -> crap-rest -> gRPC -> crap-cms
                            (port 8080)         (port 50051)
 ```
 
@@ -469,3 +491,56 @@ Browser/App ──HTTP/JSON──▶ crap-rest ──gRPC──▶ crap-cms
 - Auth tokens forwarded as-is via gRPC metadata
 - CORS enabled by default (configurable)
 - Response compression (gzip + brotli)
+
+## Deployment
+
+### Docker
+
+```bash
+# Run alongside crap-cms (assumes crap-cms is reachable at host.docker.internal)
+docker run -p 8080:8080 \
+  ghcr.io/dkluhzeb/crap-rest:nightly -g http://host.docker.internal:50051
+
+# Or with a custom config
+docker run -p 8080:8080 -v ./crap-rest.toml:/config.toml \
+  ghcr.io/dkluhzeb/crap-rest:nightly -c /config.toml
+```
+
+Images are Alpine-based and published to `ghcr.io/dkluhzeb/crap-rest`. Tags:
+
+| Tag | Description |
+|-----|-------------|
+| `nightly` | Latest master build (x86_64) |
+| `sha-<commit>` | Pinned to a specific commit |
+| `X.Y.Z-alpha.N` | Tagged release |
+| `X.Y` | Latest patch in a minor series |
+| `latest` | Most recent tagged release |
+
+### Static Binaries
+
+Pre-built static binaries are attached to each [GitHub Release](https://github.com/dkluhzeb/crap-rest/releases):
+
+- `crap-rest-linux-x86_64` — Linux x86_64 (musl, fully static)
+- `crap-rest-linux-aarch64` — Linux ARM64 (musl, fully static)
+- `crap-rest-windows-x86_64.exe` — Windows x86_64
+
+Download and run directly — no runtime dependencies required.
+
+```bash
+curl -L -o crap-rest \
+  https://github.com/dkluhzeb/crap-rest/releases/latest/download/crap-rest-linux-x86_64
+chmod +x crap-rest
+./crap-rest -g http://localhost:50051
+```
+
+### CI/CD
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| **CI** | Every push & PR | fmt, clippy, tests |
+| **Nightly** | Push to master | x86_64 musl binary, Docker `nightly` tag |
+| **Release** | Tag `v*` | Multi-arch binaries, Docker semver tags, GitHub Release (pre-release) |
+
+## License
+
+MIT

@@ -1,0 +1,26 @@
+[target.x86_64-unknown-linux-musl]
+pre-build = ["""
+PROTOC_VERSION=29.3 && \
+curl -sSL https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip -o /tmp/protoc.zip && \
+apt-get update && apt-get install -y unzip && \
+unzip -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*' && \
+rm /tmp/protoc.zip
+"""]
+
+[target.aarch64-unknown-linux-musl]
+pre-build = ["""
+PROTOC_VERSION=29.3 && \
+curl -sSL https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip -o /tmp/protoc.zip && \
+apt-get update && apt-get install -y unzip && \
+unzip -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*' && \
+rm /tmp/protoc.zip
+"""]
+
+[target.x86_64-pc-windows-gnu]
+pre-build = ["""
+PROTOC_VERSION=29.3 && \
+curl -sSL https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip -o /tmp/protoc.zip && \
+apt-get update && apt-get install -y unzip && \
+unzip -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*' && \
+rm /tmp/protoc.zip
+"""]
