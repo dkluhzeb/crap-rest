@@ -13,9 +13,9 @@ use super::AppState;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/schema", get(list_collections))
-        .route("/api/schema/collections/{slug}", get(describe_collection))
-        .route("/api/schema/globals/{slug}", get(describe_global))
+        .route("/schema", get(list_collections))
+        .route("/schema/collections/{slug}", get(describe_collection))
+        .route("/schema/globals/{slug}", get(describe_global))
 }
 
 async fn list_collections(State(client): State<GrpcClient>) -> RestResult<Json<Value>> {

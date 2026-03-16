@@ -79,7 +79,7 @@ All endpoints return JSON. Errors return `{ "error": "<message>" }` with appropr
 Pass a Bearer token in the `Authorization` header. The gateway forwards it to gRPC as-is — no JWT validation happens in the gateway.
 
 ```bash
-curl -H 'Authorization: Bearer <token>' http://localhost:8080/api/collections/posts
+curl -H 'Authorization: Bearer <token>' http://localhost:8080/collections/posts
 ```
 
 ---
@@ -88,7 +88,7 @@ curl -H 'Authorization: Bearer <token>' http://localhost:8080/api/collections/po
 
 #### Find documents
 ```
-GET /api/collections/:slug
+GET /collections/:slug
 ```
 
 Query parameters (all optional):
@@ -105,7 +105,7 @@ Query parameters (all optional):
 | `draft`    | boolean | Include drafts                       |
 
 ```bash
-curl 'http://localhost:8080/api/collections/posts?limit=10&offset=0&order_by=-created_at'
+curl 'http://localhost:8080/collections/posts?limit=10&offset=0&order_by=-created_at'
 ```
 
 Response:
@@ -120,13 +120,13 @@ Response:
 
 #### Count documents
 ```
-GET /api/collections/:slug/count
+GET /collections/:slug/count
 ```
 
 Query parameters: `where`, `locale`, `draft` (same as Find).
 
 ```bash
-curl 'http://localhost:8080/api/collections/posts/count?where={"status":{"equals":"published"}}'
+curl 'http://localhost:8080/collections/posts/count?where={"status":{"equals":"published"}}'
 ```
 
 Response:
@@ -136,24 +136,24 @@ Response:
 
 #### Find by ID
 ```
-GET /api/collections/:slug/:id
+GET /collections/:slug/:id
 ```
 
 Query parameters: `depth`, `locale`, `select`, `draft`.
 
 ```bash
-curl http://localhost:8080/api/collections/posts/abc123?depth=1
+curl http://localhost:8080/collections/posts/abc123?depth=1
 ```
 
 Response: flat document object (fields merged into top level).
 
 #### Create document
 ```
-POST /api/collections/:slug
+POST /collections/:slug
 ```
 
 ```bash
-curl -X POST http://localhost:8080/api/collections/posts \
+curl -X POST http://localhost:8080/collections/posts \
   -H 'Authorization: Bearer <token>' \
   -H 'Content-Type: application/json' \
   -d '{"title": "New Post", "slug": "new-post", "content": "Hello world"}'
@@ -167,11 +167,11 @@ Response: the created document.
 
 #### Update document
 ```
-PATCH /api/collections/:slug/:id
+PATCH /collections/:slug/:id
 ```
 
 ```bash
-curl -X PATCH http://localhost:8080/api/collections/posts/abc123 \
+curl -X PATCH http://localhost:8080/collections/posts/abc123 \
   -H 'Authorization: Bearer <token>' \
   -H 'Content-Type: application/json' \
   -d '{"title": "Updated Title"}'
@@ -183,11 +183,11 @@ Response: the updated document.
 
 #### Delete document
 ```
-DELETE /api/collections/:slug/:id
+DELETE /collections/:slug/:id
 ```
 
 ```bash
-curl -X DELETE http://localhost:8080/api/collections/posts/abc123 \
+curl -X DELETE http://localhost:8080/collections/posts/abc123 \
   -H 'Authorization: Bearer <token>'
 ```
 
@@ -198,11 +198,11 @@ Response:
 
 #### Bulk update
 ```
-PATCH /api/collections/:slug/bulk
+PATCH /collections/:slug/bulk
 ```
 
 ```bash
-curl -X PATCH http://localhost:8080/api/collections/posts/bulk \
+curl -X PATCH http://localhost:8080/collections/posts/bulk \
   -H 'Authorization: Bearer <token>' \
   -H 'Content-Type: application/json' \
   -d '{"where": "{\"status\":{\"equals\":\"draft\"}}", "data": {"status": "published"}}'
@@ -215,11 +215,11 @@ Response:
 
 #### Bulk delete
 ```
-DELETE /api/collections/:slug/bulk
+DELETE /collections/:slug/bulk
 ```
 
 ```bash
-curl -X DELETE http://localhost:8080/api/collections/posts/bulk \
+curl -X DELETE http://localhost:8080/collections/posts/bulk \
   -H 'Authorization: Bearer <token>' \
   -H 'Content-Type: application/json' \
   -d '{"where": "{\"status\":{\"equals\":\"archived\"}}"}'
@@ -236,22 +236,22 @@ Response:
 
 #### Get global
 ```
-GET /api/globals/:slug
+GET /globals/:slug
 ```
 
 Query parameters: `locale`.
 
 ```bash
-curl http://localhost:8080/api/globals/site-settings
+curl http://localhost:8080/globals/site-settings
 ```
 
 #### Update global
 ```
-PATCH /api/globals/:slug
+PATCH /globals/:slug
 ```
 
 ```bash
-curl -X PATCH http://localhost:8080/api/globals/site-settings \
+curl -X PATCH http://localhost:8080/globals/site-settings \
   -H 'Authorization: Bearer <token>' \
   -H 'Content-Type: application/json' \
   -d '{"site_name": "My Site"}'
@@ -263,11 +263,11 @@ curl -X PATCH http://localhost:8080/api/globals/site-settings \
 
 #### Login
 ```
-POST /api/auth/:collection/login
+POST /auth/:collection/login
 ```
 
 ```bash
-curl -X POST http://localhost:8080/api/auth/users/login \
+curl -X POST http://localhost:8080/auth/users/login \
   -H 'Content-Type: application/json' \
   -d '{"email": "admin@example.com", "password": "secret123"}'
 ```
@@ -282,43 +282,43 @@ Response:
 
 #### Get current user
 ```
-GET /api/auth/me
+GET /auth/me
 ```
 
 ```bash
-curl http://localhost:8080/api/auth/me \
+curl http://localhost:8080/auth/me \
   -H 'Authorization: Bearer eyJhbGciOi...'
 ```
 
 #### Forgot password
 ```
-POST /api/auth/:collection/forgot-password
+POST /auth/:collection/forgot-password
 ```
 
 ```bash
-curl -X POST http://localhost:8080/api/auth/users/forgot-password \
+curl -X POST http://localhost:8080/auth/users/forgot-password \
   -H 'Content-Type: application/json' \
   -d '{"email": "admin@example.com"}'
 ```
 
 #### Reset password
 ```
-POST /api/auth/:collection/reset-password
+POST /auth/:collection/reset-password
 ```
 
 ```bash
-curl -X POST http://localhost:8080/api/auth/users/reset-password \
+curl -X POST http://localhost:8080/auth/users/reset-password \
   -H 'Content-Type: application/json' \
   -d '{"token": "reset-token-here", "new_password": "newpass123"}'
 ```
 
 #### Verify email
 ```
-POST /api/auth/:collection/verify-email
+POST /auth/:collection/verify-email
 ```
 
 ```bash
-curl -X POST http://localhost:8080/api/auth/users/verify-email \
+curl -X POST http://localhost:8080/auth/users/verify-email \
   -H 'Content-Type: application/json' \
   -d '{"token": "verification-token-here"}'
 ```
@@ -329,11 +329,11 @@ curl -X POST http://localhost:8080/api/auth/users/verify-email \
 
 #### List all collections and globals
 ```
-GET /api/schema
+GET /schema
 ```
 
 ```bash
-curl http://localhost:8080/api/schema
+curl http://localhost:8080/schema
 ```
 
 Response:
@@ -350,18 +350,18 @@ Response:
 
 #### Describe collection
 ```
-GET /api/schema/collections/:slug
+GET /schema/collections/:slug
 ```
 
 ```bash
-curl http://localhost:8080/api/schema/collections/posts
+curl http://localhost:8080/schema/collections/posts
 ```
 
 Returns full field definitions including types, validation, relationships, and blocks.
 
 #### Describe global
 ```
-GET /api/schema/globals/:slug
+GET /schema/globals/:slug
 ```
 
 ---
@@ -370,13 +370,13 @@ GET /api/schema/globals/:slug
 
 #### List versions
 ```
-GET /api/collections/:slug/:id/versions
+GET /collections/:slug/:id/versions
 ```
 
 Query parameters: `limit`.
 
 ```bash
-curl http://localhost:8080/api/collections/posts/abc123/versions?limit=10 \
+curl http://localhost:8080/collections/posts/abc123/versions?limit=10 \
   -H 'Authorization: Bearer <token>'
 ```
 
@@ -391,11 +391,11 @@ Response:
 
 #### Restore version
 ```
-POST /api/collections/:slug/:id/versions/:vid/restore
+POST /collections/:slug/:id/versions/:vid/restore
 ```
 
 ```bash
-curl -X POST http://localhost:8080/api/collections/posts/abc123/versions/v1/restore \
+curl -X POST http://localhost:8080/collections/posts/abc123/versions/v1/restore \
   -H 'Authorization: Bearer <token>'
 ```
 
@@ -405,16 +405,16 @@ curl -X POST http://localhost:8080/api/collections/posts/abc123/versions/v1/rest
 
 #### List job definitions
 ```
-GET /api/jobs
+GET /jobs
 ```
 
 #### Trigger a job
 ```
-POST /api/jobs/:slug/trigger
+POST /jobs/:slug/trigger
 ```
 
 ```bash
-curl -X POST http://localhost:8080/api/jobs/send-newsletter/trigger \
+curl -X POST http://localhost:8080/jobs/send-newsletter/trigger \
   -H 'Authorization: Bearer <token>' \
   -H 'Content-Type: application/json' \
   -d '{"data": {"template": "weekly"}}'
@@ -427,12 +427,12 @@ Response:
 
 #### Get job run status
 ```
-GET /api/jobs/runs/:id
+GET /jobs/runs/:id
 ```
 
 #### List job runs
 ```
-GET /api/jobs/runs
+GET /jobs/runs
 ```
 
 Query parameters: `slug`, `status`, `limit`, `offset`.

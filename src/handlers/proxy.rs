@@ -11,9 +11,9 @@ use super::AppState;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/uploads/{slug}", post(create_upload))
-        .route("/api/uploads/{slug}/{id}", patch(update_upload))
-        .route("/api/uploads/{slug}/{id}", delete(delete_upload))
+        .route("/uploads/{slug}", post(create_upload))
+        .route("/uploads/{slug}/{id}", patch(update_upload))
+        .route("/uploads/{slug}/{id}", delete(delete_upload))
         .route("/uploads/{slug}/{filename}", get(serve_file))
 }
 

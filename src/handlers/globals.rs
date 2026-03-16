@@ -21,8 +21,8 @@ pub struct GlobalParams {
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/globals/{slug}", get(get_global))
-        .route("/api/globals/{slug}", patch(update_global))
+        .route("/globals/{slug}", get(get_global))
+        .route("/globals/{slug}", patch(update_global))
 }
 
 async fn get_global(

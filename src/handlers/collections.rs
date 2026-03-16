@@ -31,14 +31,14 @@ pub struct FindParams {
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/collections/{slug}", get(find))
-        .route("/api/collections/{slug}/count", get(count))
-        .route("/api/collections/{slug}/{id}", get(find_by_id))
-        .route("/api/collections/{slug}", post(create))
-        .route("/api/collections/{slug}/{id}", patch(update))
-        .route("/api/collections/{slug}/{id}", delete(delete_doc))
-        .route("/api/collections/{slug}/bulk", patch(update_many))
-        .route("/api/collections/{slug}/bulk", delete(delete_many))
+        .route("/collections/{slug}", get(find))
+        .route("/collections/{slug}/count", get(count))
+        .route("/collections/{slug}/{id}", get(find_by_id))
+        .route("/collections/{slug}", post(create))
+        .route("/collections/{slug}/{id}", patch(update))
+        .route("/collections/{slug}/{id}", delete(delete_doc))
+        .route("/collections/{slug}/bulk", patch(update_many))
+        .route("/collections/{slug}/bulk", delete(delete_many))
 }
 
 async fn find(

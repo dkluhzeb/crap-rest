@@ -28,8 +28,8 @@ pub fn routes(client: GrpcClient, config: &OpenApiConfig) -> Router {
         config: Arc::new(config.clone()),
     };
     Router::new()
-        .route("/api", get(scalar_ui))
-        .route("/api/openapi.json", get(openapi_json))
+        .route("/", get(scalar_ui))
+        .route("/openapi.json", get(openapi_json))
         .with_state(state)
 }
 
@@ -42,7 +42,7 @@ async fn scalar_ui() -> impl IntoResponse {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
 <body>
-  <script id="api-reference" data-url="./api/openapi.json"></script>
+  <script id="api-reference" data-url="./openapi.json"></script>
   <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
 </body>
 </html>"#;
@@ -141,8 +141,8 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
         let schema_ref = json!({"$ref": format!("#/components/schemas/{schema_name}")});
         let input_ref = json!({"$ref": format!("#/components/schemas/{input_name}")});
 
-        // GET /api/collections/{slug}
-        let find_path = format!("/api/collections/{slug}");
+        // GET /collections/{slug}
+        let find_path = format!("/collections/{slug}");
         paths.insert(
             find_path.clone(),
             json!({
@@ -190,8 +190,8 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
             }),
         );
 
-        // GET/PATCH/DELETE /api/collections/{slug}/{id}
-        let id_path = format!("/api/collections/{slug}/{{id}}");
+        // GET/PATCH/DELETE /collections/{slug}/{id}
+        let id_path = format!("/collections/{slug}/{{id}}");
         paths.insert(
             id_path,
             json!({
@@ -264,8 +264,8 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
             }),
         );
 
-        // GET /api/collections/{slug}/count
-        let count_path = format!("/api/collections/{slug}/count");
+        // GET /collections/{slug}/count
+        let count_path = format!("/collections/{slug}/count");
         paths.insert(
             count_path,
             json!({
@@ -299,7 +299,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
         );
 
         // Bulk operations
-        let bulk_path = format!("/api/collections/{slug}/bulk");
+        let bulk_path = format!("/collections/{slug}/bulk");
         paths.insert(
             bulk_path,
             json!({
@@ -376,7 +376,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
         );
 
         // Version paths
-        let versions_path = format!("/api/collections/{slug}/{{id}}/versions");
+        let versions_path = format!("/collections/{slug}/{{id}}/versions");
         paths.insert(
             versions_path,
             json!({
@@ -411,7 +411,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
         );
 
         let restore_path =
-            format!("/api/collections/{slug}/{{id}}/versions/{{version_id}}/restore");
+            format!("/collections/{slug}/{{id}}/versions/{{version_id}}/restore");
         paths.insert(
             restore_path,
             json!({
@@ -440,7 +440,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
             let auth_tag = format!("{slug} auth");
 
             paths.insert(
-                format!("/api/auth/{slug}/login"),
+                format!("/auth/{slug}/login"),
                 json!({
                     "post": {
                         "summary": format!("Login to {slug}"),
@@ -483,7 +483,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
             );
 
             paths.insert(
-                format!("/api/auth/{slug}/forgot-password"),
+                format!("/auth/{slug}/forgot-password"),
                 json!({
                     "post": {
                         "summary": "Request password reset",
@@ -523,7 +523,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
             );
 
             paths.insert(
-                format!("/api/auth/{slug}/reset-password"),
+                format!("/auth/{slug}/reset-password"),
                 json!({
                     "post": {
                         "summary": "Reset password with token",
@@ -564,7 +564,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
             );
 
             paths.insert(
-                format!("/api/auth/{slug}/verify-email"),
+                format!("/auth/{slug}/verify-email"),
                 json!({
                     "post": {
                         "summary": "Verify email address",
@@ -608,7 +608,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
     // Auth me endpoint (if any auth collection exists)
     if has_auth {
         paths.insert(
-            "/api/auth/me".to_string(),
+            "/auth/me".to_string(),
             json!({
                 "get": {
                     "summary": "Get current user",
@@ -649,7 +649,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
 
         let schema_ref = json!({"$ref": format!("#/components/schemas/{schema_name}")});
 
-        let path = format!("/api/globals/{slug}");
+        let path = format!("/globals/{slug}");
         paths.insert(
             path,
             json!({

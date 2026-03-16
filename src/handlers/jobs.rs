@@ -15,10 +15,10 @@ use super::{AppState, make_request};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/jobs", get(list_jobs))
-        .route("/api/jobs/{slug}/trigger", post(trigger_job))
-        .route("/api/jobs/runs/{id}", get(get_job_run))
-        .route("/api/jobs/runs", get(list_job_runs))
+        .route("/jobs", get(list_jobs))
+        .route("/jobs/{slug}/trigger", post(trigger_job))
+        .route("/jobs/runs/{id}", get(get_job_run))
+        .route("/jobs/runs", get(list_job_runs))
 }
 
 async fn list_jobs(

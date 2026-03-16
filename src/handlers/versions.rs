@@ -21,9 +21,9 @@ pub struct VersionParams {
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/collections/{slug}/{id}/versions", get(list_versions))
+        .route("/collections/{slug}/{id}/versions", get(list_versions))
         .route(
-            "/api/collections/{slug}/{id}/versions/{vid}/restore",
+            "/collections/{slug}/{id}/versions/{vid}/restore",
             post(restore_version),
         )
 }

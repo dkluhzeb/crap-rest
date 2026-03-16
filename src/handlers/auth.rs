@@ -16,17 +16,17 @@ use super::{AppState, make_request};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/auth/{collection}/login", post(login))
-        .route("/api/auth/me", get(me))
+        .route("/auth/{collection}/login", post(login))
+        .route("/auth/me", get(me))
         .route(
-            "/api/auth/{collection}/forgot-password",
+            "/auth/{collection}/forgot-password",
             post(forgot_password),
         )
         .route(
-            "/api/auth/{collection}/reset-password",
+            "/auth/{collection}/reset-password",
             post(reset_password),
         )
-        .route("/api/auth/{collection}/verify-email", post(verify_email))
+        .route("/auth/{collection}/verify-email", post(verify_email))
 }
 
 #[derive(Deserialize)]
