@@ -8,6 +8,8 @@ RESTful JSON gateway for [Crap CMS](https://github.com/dkluhzeb/crap-cms). Conne
 
 Separate binary, zero config required. Start it alongside `crap-cms serve` and talk JSON over HTTP instead of protobuf over gRPC.
 
+**Warning:** While in alpha (`0.x`), breaking changes may appear without prior notice.
+
 ## Quick Start
 
 ```bash
