@@ -101,14 +101,25 @@ jobs:
 
   release:
     name: GitHub Release
-    needs: [build-linux, build-windows]
+    needs: [build-linux, build-windows, docker]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts/
+          name: crap-rest-linux-x86_64
+          path: artifacts/crap-rest-linux-x86_64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: crap-rest-linux-aarch64
+          path: artifacts/crap-rest-linux-aarch64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: crap-rest-windows-x86_64.exe
+          path: artifacts/crap-rest-windows-x86_64.exe
 
       - name: Create release
         env:
