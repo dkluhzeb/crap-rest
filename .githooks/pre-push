@@ -1,0 +1,22 @@
+#!/bin/bash
+# Block force pushes to master/main.
+
+protected_branches="master main"
+remote="$1"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    branch="${remote_ref##refs/heads/}"
+    for protected in $protected_branches; do
+        if [ "$branch" = "$protected" ]; then
+            # Detect force push: remote_sha is not ancestor of local_sha
+            if [ "$remote_sha" != "0000000000000000000000000000000000000000" ] &&
+               ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+                echo "ERROR: Force push to '$branch' is blocked."
+                echo "Use a PR to update protected branches."
+                exit 1
+            fi
+        fi
+    done
+done
+
+exit 0

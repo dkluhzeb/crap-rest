@@ -18,14 +18,8 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/auth/{collection}/login", post(login))
         .route("/auth/me", get(me))
-        .route(
-            "/auth/{collection}/forgot-password",
-            post(forgot_password),
-        )
-        .route(
-            "/auth/{collection}/reset-password",
-            post(reset_password),
-        )
+        .route("/auth/{collection}/forgot-password", post(forgot_password))
+        .route("/auth/{collection}/reset-password", post(reset_password))
         .route("/auth/{collection}/verify-email", post(verify_email))
 }
 

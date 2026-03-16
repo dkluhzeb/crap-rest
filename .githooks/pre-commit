@@ -1,0 +1,10 @@
+#!/bin/bash
+set -e
+
+echo "Running rustfmt..."
+cargo fmt -- --check
+
+echo "Running clippy..."
+cargo clippy --all-targets -- -D warnings
+
+echo "Pre-commit checks passed."

@@ -410,8 +410,7 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
             }),
         );
 
-        let restore_path =
-            format!("/collections/{slug}/{{id}}/versions/{{version_id}}/restore");
+        let restore_path = format!("/collections/{slug}/{{id}}/versions/{{version_id}}/restore");
         paths.insert(
             restore_path,
             json!({

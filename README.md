@@ -11,6 +11,8 @@ Separate binary, zero config required. Start it alongside `crap-cms serve` and t
 ## Quick Start
 
 ```bash
+git config core.hooksPath .githooks  # enable shared git hooks (fmt + clippy pre-commit)
+
 # Build
 cargo build --release
 
@@ -510,7 +512,7 @@ Images are Alpine-based and published to `ghcr.io/dkluhzeb/crap-rest`. Tags:
 
 | Tag | Description |
 |-----|-------------|
-| `nightly` | Latest master build (x86_64) |
+| `nightly` | Latest main build (x86_64) |
 | `sha-<commit>` | Pinned to a specific commit |
 | `X.Y.Z-alpha.N` | Tagged release |
 | `X.Y` | Latest patch in a minor series |
@@ -538,7 +540,7 @@ chmod +x crap-rest
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
 | **CI** | Every push & PR | fmt, clippy, tests |
-| **Nightly** | Push to master | x86_64 musl binary, Docker `nightly` tag |
+| **Nightly** | Push to main | x86_64 musl binary, Docker `nightly` tag |
 | **Release** | Tag `v*` | Multi-arch binaries, Docker semver tags, GitHub Release (pre-release) |
 
 ## License
