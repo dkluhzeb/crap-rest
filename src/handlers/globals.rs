@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     routing::{get, patch},
 };
@@ -28,7 +28,7 @@ pub fn routes() -> Router<AppState> {
 async fn get_global(
     State(client): State<GrpcClient>,
     Path(slug): Path<String>,
-    axum::extract::Query(params): axum::extract::Query<GlobalParams>,
+    Query(params): Query<GlobalParams>,
     headers: HeaderMap,
 ) -> RestResult<Json<Value>> {
     let req = make_request(

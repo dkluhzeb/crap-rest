@@ -1,6 +1,6 @@
 [package]
 name = "crap-rest"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition = "2024"
 description = "RESTful JSON gateway for Crap CMS — proxies HTTP to gRPC"
 license = "MIT"
@@ -17,7 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Web framework
-axum = { version = "0.8", features = ["json", "macros", "query"] }
+axum = { version = "0.8", features = ["json", "macros", "query", "ws"] }
 tower-http = { version = "0.6", features = ["cors", "compression-gzip", "compression-br"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
 

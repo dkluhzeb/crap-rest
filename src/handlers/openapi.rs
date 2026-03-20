@@ -8,6 +8,8 @@ use axum::{
     routing::get,
 };
 use serde_json::{Map, Value, json};
+use tokio::sync::OnceCell;
+use tracing::warn;
 
 use crate::client::GrpcClient;
 use crate::config::OpenApiConfig;
@@ -17,6 +19,7 @@ use crate::proto;
 pub struct OpenApiState {
     pub client: GrpcClient,
     pub config: Arc<OpenApiConfig>,
+    pub cached_spec: Arc<OnceCell<String>>,
 }
 
 pub fn routes(client: GrpcClient, config: &OpenApiConfig) -> Router {
@@ -26,6 +29,7 @@ pub fn routes(client: GrpcClient, config: &OpenApiConfig) -> Router {
     let state = OpenApiState {
         client,
         config: Arc::new(config.clone()),
+        cached_spec: Arc::new(OnceCell::new()),
     };
     Router::new()
         .route("/", get(scalar_ui))
@@ -51,11 +55,19 @@ async fn scalar_ui() -> impl IntoResponse {
 }
 
 async fn openapi_json(State(state): State<OpenApiState>) -> impl IntoResponse {
-    match generate_spec(&state.client, &state.config).await {
+    let result = state
+        .cached_spec
+        .get_or_try_init(|| async {
+            let spec = generate_spec(&state.client, &state.config).await?;
+            Ok::<_, anyhow::Error>(spec.to_string())
+        })
+        .await;
+
+    match result {
         Ok(spec) => (
             StatusCode::OK,
             [(header::CONTENT_TYPE, "application/json")],
-            spec.to_string(),
+            spec.clone(),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -121,7 +133,10 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
     for (info, desc_result) in list_resp.collections.iter().zip(collection_descs) {
         let desc = match desc_result {
             Ok(d) => d,
-            Err(_) => continue,
+            Err(e) => {
+                warn!("failed to describe collection '{}': {e}", info.slug);
+                continue;
+            }
         };
 
         let slug = &info.slug;
@@ -636,7 +651,10 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
     for (info, desc_result) in list_resp.globals.iter().zip(global_descs) {
         let desc = match desc_result {
             Ok(d) => d,
-            Err(_) => continue,
+            Err(e) => {
+                warn!("failed to describe global '{}': {e}", info.slug);
+                continue;
+            }
         };
 
         let slug = &info.slug;

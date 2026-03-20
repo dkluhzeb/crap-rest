@@ -5,17 +5,19 @@ mod jobs;
 pub mod openapi;
 mod proxy;
 mod schema;
+mod subscribe;
 mod versions;
 
 use axum::{Router, extract::FromRef, http::HeaderMap};
 
 use crate::client::GrpcClient;
-use crate::config::OpenApiConfig;
+use crate::config::{OpenApiConfig, SubscribeConfig};
 
 #[derive(Clone)]
 pub struct AppState {
     pub grpc: GrpcClient,
     pub proxy: Option<ProxyState>,
+    pub subscribe: Option<SubscribeConfig>,
 }
 
 #[derive(Clone)]
@@ -55,6 +57,12 @@ pub fn router(state: AppState, openapi_config: &OpenApiConfig) -> Router {
 
     let main = if state.proxy.is_some() {
         main.merge(proxy::routes())
+    } else {
+        main
+    };
+
+    let main = if state.subscribe.is_some() {
+        main.merge(subscribe::routes())
     } else {
         main
     };

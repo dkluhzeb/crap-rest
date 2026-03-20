@@ -38,6 +38,7 @@ Options:
       --openapi <BOOL>    Serve OpenAPI docs at / [default: true]
       --proxy             Enable upload/file proxy to CMS HTTP server
       --cms-url <URL>     CMS HTTP address for proxy [default: http://localhost:3000]
+      --subscribe         Enable WebSocket /subscribe endpoint for real-time events
   -h, --help              Print help
 ```
 
@@ -58,6 +59,9 @@ crap-rest --proxy --cms-url http://localhost:3000
 
 # Disable OpenAPI docs
 crap-rest --openapi false
+
+# Enable real-time WebSocket subscriptions
+crap-rest --subscribe
 ```
 
 ## Config File
@@ -85,6 +89,12 @@ version = "1.0.0"
 [proxy]
 enabled = false
 cms_url = "http://localhost:3000"
+
+[subscribe]
+enabled = false
+ping_interval = "30s"    # WebSocket keepalive ping interval (e.g. "30s", "1m")
+timeout = "10s"          # max wait for initial subscribe message (e.g. "10s", "30s")
+max_message_size = "8KB" # max incoming WebSocket message size (e.g. "8KB", "1MB")
 ```
 
 ## Logging
@@ -465,6 +475,76 @@ Query parameters: `slug`, `status`, `limit`, `offset`.
 
 ---
 
+### Real-time Subscriptions (WebSocket)
+
+Subscribe to live mutation events via WebSocket. Bridges the gRPC `Subscribe` server-streaming RPC to the browser WebSocket API.
+
+**Disabled by default.** Enable with `--subscribe` CLI flag or `[subscribe] enabled = true` in the config file.
+
+#### Protocol
+
+1. Connect: `GET /subscribe` → WebSocket upgrade
+2. Send a subscribe message (JSON text frame):
+   ```json
+   {
+     "collections": ["posts"],
+     "globals": ["settings"],
+     "operations": ["create", "update"],
+     "token": "eyJ..."
+   }
+   ```
+   All fields are optional — omit to subscribe to everything.
+3. Receive mutation events as JSON text frames
+4. Server sends WebSocket Ping for keepalive (default: every 30s, configurable)
+
+#### Authentication
+
+Two options:
+
+- **In-message token** (browsers): include `"token": "..."` in the subscribe message
+- **Authorization header** (non-browser clients): pass `Authorization: Bearer <token>` on the upgrade request
+
+The message token takes priority if both are provided.
+
+#### Event format
+
+```json
+{
+  "sequence": 1,
+  "timestamp": "2024-01-15T10:30:00Z",
+  "target": "collection",
+  "operation": "create",
+  "collection": "posts",
+  "document_id": "abc123",
+  "data": { "title": "Hello" }
+}
+```
+
+#### Error format
+
+If the gRPC stream fails to start or encounters an error:
+
+```json
+{ "error": "message" }
+```
+
+The connection is closed after sending an error frame.
+
+#### Examples
+
+```bash
+# Using websocat
+websocat ws://localhost:8080/subscribe
+> {"collections":["posts"]}
+< {"sequence":1,"target":"collection","operation":"create","collection":"posts",...}
+
+# With auth header (non-browser)
+websocat -H 'Authorization: Bearer eyJ...' ws://localhost:8080/subscribe
+> {}
+```
+
+---
+
 ## Error Responses
 
 All errors return JSON with an appropriate HTTP status:
@@ -486,8 +566,9 @@ All errors return JSON with an appropriate HTTP status:
 ## Architecture
 
 ```
-Browser/App - HTTP/JSON -> crap-rest -> gRPC -> crap-cms
-                           (port 8080)         (port 50051)
+Browser/App - HTTP/JSON -> crap-rest -> gRPC -----------> crap-cms
+            - WebSocket -> /subscribe -> gRPC Subscribe -> (port 50051)
+                           (port 8080)
 ```
 
 - Stateless proxy — no database, no auth logic, no sessions

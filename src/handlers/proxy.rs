@@ -9,6 +9,16 @@ use axum::{
 
 use super::AppState;
 
+/// Reject path segments that could be used for path traversal.
+fn reject_traversal(segments: &[&str]) -> Result<(), StatusCode> {
+    for s in segments {
+        if s.contains("..") || s.contains('/') || s.contains('\\') {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+    Ok(())
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/uploads/{slug}", post(create_upload))
@@ -23,6 +33,7 @@ async fn create_upload(
     headers: HeaderMap,
     body: Body,
 ) -> Result<Response, StatusCode> {
+    reject_traversal(&[&slug])?;
     let proxy = state.proxy.as_ref().ok_or(StatusCode::NOT_FOUND)?;
     let url = format!("{}/api/upload/{}", proxy.cms_url, slug);
 
@@ -41,6 +52,7 @@ async fn update_upload(
     headers: HeaderMap,
     body: Body,
 ) -> Result<Response, StatusCode> {
+    reject_traversal(&[&slug, &id])?;
     let proxy = state.proxy.as_ref().ok_or(StatusCode::NOT_FOUND)?;
     let url = format!("{}/api/upload/{}/{}", proxy.cms_url, slug, id);
 
@@ -58,6 +70,7 @@ async fn delete_upload(
     Path((slug, id)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
+    reject_traversal(&[&slug, &id])?;
     let proxy = state.proxy.as_ref().ok_or(StatusCode::NOT_FOUND)?;
     let url = format!("{}/api/upload/{}/{}", proxy.cms_url, slug, id);
 
@@ -73,6 +86,7 @@ async fn serve_file(
     Path((slug, filename)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
+    reject_traversal(&[&slug, &filename])?;
     let proxy = state.proxy.as_ref().ok_or(StatusCode::NOT_FOUND)?;
     let url = format!("{}/uploads/{}/{}", proxy.cms_url, slug, filename);
 
@@ -128,4 +142,61 @@ async fn proxy_response(resp: reqwest::Response) -> Result<Response, StatusCode>
     builder
         .body(Body::from_stream(resp.bytes_stream()))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reject_traversal_allows_normal_segments() {
+        assert!(reject_traversal(&["posts"]).is_ok());
+        assert!(reject_traversal(&["my-collection", "abc123"]).is_ok());
+        assert!(reject_traversal(&["uploads", "image.png"]).is_ok());
+    }
+
+    #[test]
+    fn reject_traversal_blocks_dot_dot() {
+        assert_eq!(reject_traversal(&[".."]), Err(StatusCode::BAD_REQUEST));
+        assert_eq!(reject_traversal(&["..%2f"]), Err(StatusCode::BAD_REQUEST));
+        assert_eq!(
+            reject_traversal(&["foo..bar"]),
+            Err(StatusCode::BAD_REQUEST)
+        );
+    }
+
+    #[test]
+    fn reject_traversal_blocks_forward_slash() {
+        assert_eq!(reject_traversal(&["foo/bar"]), Err(StatusCode::BAD_REQUEST));
+    }
+
+    #[test]
+    fn reject_traversal_blocks_backslash() {
+        assert_eq!(
+            reject_traversal(&["foo\\bar"]),
+            Err(StatusCode::BAD_REQUEST)
+        );
+    }
+
+    #[test]
+    fn reject_traversal_checks_all_segments() {
+        // First segment ok, second has traversal
+        assert_eq!(
+            reject_traversal(&["valid", "../etc/passwd"]),
+            Err(StatusCode::BAD_REQUEST)
+        );
+    }
+
+    #[test]
+    fn reject_traversal_allows_single_dot() {
+        // A single dot is not ".." — should be allowed
+        assert!(reject_traversal(&["file.txt"]).is_ok());
+        assert!(reject_traversal(&[".hidden"]).is_ok());
+    }
+
+    #[test]
+    fn reject_traversal_empty_segments() {
+        assert!(reject_traversal(&[]).is_ok());
+        assert!(reject_traversal(&[""]).is_ok());
+    }
 }
