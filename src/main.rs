@@ -49,6 +49,10 @@ struct Cli {
     /// CMS HTTP address for proxy (default: http://localhost:3000)
     #[arg(long)]
     cms_url: Option<String>,
+
+    /// Enable WebSocket /subscribe endpoint for real-time events
+    #[arg(long)]
+    subscribe: bool,
 }
 
 #[tokio::main]
@@ -85,6 +89,11 @@ async fn main() -> anyhow::Result<()> {
         cfg.proxy.cms_url = url;
         cfg.proxy.enabled = true;
     }
+    if cli.subscribe {
+        cfg.subscribe.enabled = true;
+    }
+
+    cfg.validate()?;
 
     let client = GrpcClient::new(&cfg.grpc.address)?;
 
@@ -99,15 +108,30 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    let subscribe = if cfg.subscribe.enabled {
+        tracing::info!(
+            "WebSocket /subscribe enabled (ping={:?}, timeout={:?}, max_msg={}B)",
+            cfg.subscribe.ping_interval,
+            cfg.subscribe.timeout,
+            cfg.subscribe.max_message_size,
+        );
+        Some(cfg.subscribe)
+    } else {
+        tracing::info!("WebSocket /subscribe disabled");
+        None
+    };
+
     let state = AppState {
         grpc: client,
         proxy,
+        subscribe,
     };
 
+    let allowed_methods = [Method::GET, Method::POST, Method::PATCH, Method::DELETE];
     let cors = if cfg.cors.allowed_origins.iter().any(|o| o == "*") {
         CorsLayer::new()
             .allow_origin(Any)
-            .allow_methods(Any)
+            .allow_methods(allowed_methods)
             .allow_headers(Any)
     } else {
         let origins: Vec<HeaderValue> = cfg
@@ -118,7 +142,7 @@ async fn main() -> anyhow::Result<()> {
             .collect();
         CorsLayer::new()
             .allow_origin(AllowOrigin::list(origins))
-            .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+            .allow_methods(allowed_methods)
             .allow_headers(Any)
     };
 

@@ -66,7 +66,7 @@ async fn find(
             draft: params.draft,
             after_cursor: params.after_cursor,
             before_cursor: params.before_cursor,
-            search: params.search.clone(),
+            search: params.search,
         },
     );
 
