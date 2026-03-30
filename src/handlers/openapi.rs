@@ -258,7 +258,8 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
                     "operationId": format!("delete_{slug}"),
                     "tags": [slug],
                     "parameters": [
-                        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+                        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+                        { "name": "force", "in": "query", "description": "Force permanent deletion even if soft_delete is enabled", "schema": { "type": "boolean" } }
                     ],
                     "responses": {
                         "200": {
@@ -268,7 +269,8 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
                                     "schema": {
                                         "type": "object",
                                         "properties": {
-                                            "success": { "type": "boolean" }
+                                            "success": { "type": "boolean" },
+                                            "softDeleted": { "type": "boolean" }
                                         }
                                     }
                                 }
@@ -332,7 +334,8 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
                                         "where": { "type": "string", "description": "JSON filter" },
                                         "data": input_ref,
                                         "locale": { "type": "string" },
-                                        "draft": { "type": "boolean" }
+                                        "draft": { "type": "boolean" },
+                                        "hooks": { "type": "boolean", "description": "Run lifecycle hooks (default: true)" }
                                     }
                                 }
                             }
@@ -365,7 +368,8 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "where": { "type": "string", "description": "JSON filter" }
+                                        "where": { "type": "string", "description": "JSON filter" },
+                                        "hooks": { "type": "boolean", "description": "Run lifecycle hooks (default: true)" }
                                     }
                                 }
                             }
@@ -383,6 +387,30 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }),
+        );
+
+        // Restore (soft-deleted documents)
+        let restore_doc_path = format!("/collections/{slug}/{{id}}/restore");
+        paths.insert(
+            restore_doc_path,
+            json!({
+                "post": {
+                    "summary": format!("Restore {label} from trash"),
+                    "operationId": format!("restore_{slug}"),
+                    "tags": [slug],
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Restored document",
+                            "content": {
+                                "application/json": { "schema": schema_ref }
                             }
                         }
                     }
