@@ -1,386 +1,1243 @@
+// Crap CMS gRPC API — ContentAPI service
+//
+// All RPCs communicate over plaintext gRPC (no TLS by default).
+// Use grpcurl with the -plaintext flag and server reflection (no --proto needed):
+//
+//   grpcurl -plaintext localhost:50051 crap.ContentAPI/Find
+//
+// Auth: RPCs that enforce access control read a Bearer JWT from the
+// `authorization` gRPC metadata key:
+//
+//   -H "authorization: Bearer <token>"
+//
+// Obtain a token via the Login RPC. RPCs that accept (but do not require) auth
+// will still apply collection-level access functions when a token is present.
+//
+// Common status codes returned by multiple RPCs:
+//   NOT_FOUND          — collection/global slug unknown to the registry
+//   PERMISSION_DENIED  — access function denied the operation, or account locked
+//   INVALID_ARGUMENT   — malformed input (bad where clause, unknown operators, etc.)
+//   UNAVAILABLE        — DB pool exhausted or SQLite busy; safe to retry
+//   INTERNAL           — unexpected server error (details are logged server-side)
+
 syntax = "proto3";
 
 package crap;
 
 import "google/protobuf/struct.proto";
 
+// ContentAPI is the primary gRPC interface for Crap CMS.
+// It exposes collection CRUD, global management, authentication, schema
+// introspection, real-time subscriptions, versioning, and background jobs.
 service ContentAPI {
+  // Find lists documents in a collection with optional filtering, sorting,
+  // and pagination. Fires before_read / after_read hooks.
+  //
+  // Auth: optional. If a Bearer token is present, collection-level read access
+  // functions are evaluated with the authenticated user.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered
+  //   PERMISSION_DENIED — read access denied by access function
+  //   INVALID_ARGUMENT  — malformed where clause or unknown filter operators
+  //   UNAVAILABLE       — transient DB error; retry
   rpc Find (FindRequest) returns (FindResponse);
+
+  // FindByID fetches a single document by its nanoid. Fires before_read /
+  // after_read hooks. Returns a NOT_FOUND (code 5) gRPC status error when no
+  // document matches the given ID.
+  //
+  // Auth: optional. Access functions are evaluated when a token is present.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered
+  //   PERMISSION_DENIED — read access denied by access function
+  //   UNAVAILABLE       — transient DB error; retry
   rpc FindByID (FindByIDRequest) returns (FindByIDResponse);
+
+  // Create inserts a new document and fires the full write hook lifecycle:
+  // before_validate → before_change → (DB write) → after_change.
+  // The entire operation runs in a single transaction.
+  //
+  // For auth collections, supply a `password` field in data; it is extracted,
+  // hashed (Argon2id), and stored in a hidden column — never returned by reads.
+  //
+  // Auth: optional. If present, create access functions are evaluated.
+  // Field-level create-denied fields are silently stripped before writing.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered
+  //   PERMISSION_DENIED — create access denied
+  //   INVALID_ARGUMENT  — validation failure, hook error, or UNIQUE constraint
+  //   UNAVAILABLE       — transient DB error; retry
   rpc Create (CreateRequest) returns (CreateResponse);
+
+  // Update modifies an existing document by ID and fires the full write hook
+  // lifecycle inside a single transaction.
+  //
+  // For auth collections, an optional `password` field in data replaces the
+  // stored hash. Pass an empty string or omit to keep the existing password.
+  // Setting unpublish=true transitions the document to draft status without
+  // requiring data (only valid for collections with drafts enabled).
+  //
+  // Auth: optional. Update access functions are evaluated when a token is present.
+  // Field-level update-denied fields are silently stripped.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered
+  //   PERMISSION_DENIED — update access denied
+  //   INVALID_ARGUMENT  — validation failure, hook error, or UNIQUE constraint
+  //   UNAVAILABLE       — transient DB error; retry
   rpc Update (UpdateRequest) returns (UpdateResponse);
+
+  // Delete removes a document by ID and fires before_delete / after_delete hooks
+  // within a single transaction.
+  //
+  // For upload collections, associated uploaded files are deleted from disk.
+  //
+  // Auth: optional. Delete access functions are evaluated when a token is present.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered
+  //   PERMISSION_DENIED — delete access denied
+  //   UNAVAILABLE       — transient DB error; retry
   rpc Delete (DeleteRequest) returns (DeleteResponse);
+
+  // Restore un-deletes a soft-deleted document, moving it out of trash.
+  // Only works on collections with `soft_delete = true`.
+  //
+  // Auth: optional. Trash access functions are evaluated when a token is present.
+  //
+  // Errors:
+  //   NOT_FOUND            — collection or document not found
+  //   PERMISSION_DENIED    — trash access denied
+  //   FAILED_PRECONDITION  — collection does not have soft_delete enabled
+  //   UNAVAILABLE          — transient DB error; retry
+  rpc Restore (RestoreRequest) returns (RestoreResponse);
+
+  // GetGlobal retrieves the single document for a global definition. Globals
+  // have no collection CRUD; there is exactly one document per global slug.
+  // Fires before_read / after_read hooks.
+  //
+  // Auth: optional. Global-level read access functions are evaluated.
+  //
+  // Errors:
+  //   NOT_FOUND         — global slug not registered
+  //   PERMISSION_DENIED — read access denied
+  //   UNAVAILABLE       — transient DB error; retry
   rpc GetGlobal (GetGlobalRequest) returns (GetGlobalResponse);
+
+  // UpdateGlobal writes new field values to the global document and fires
+  // the full write hook lifecycle inside a single transaction.
+  //
+  // Auth: optional. Global-level update access functions are evaluated.
+  //
+  // Errors:
+  //   NOT_FOUND         — global slug not registered
+  //   PERMISSION_DENIED — update access denied
+  //   INVALID_ARGUMENT  — validation failure or hook error
+  //   UNAVAILABLE       — transient DB error; retry
   rpc UpdateGlobal (UpdateGlobalRequest) returns (UpdateGlobalResponse);
+
+  // Login authenticates a user in an auth-enabled collection using email +
+  // password (local strategy). Returns a signed JWT and the user document.
+  // The token is scoped to the collection and carries the user ID, email,
+  // and expiry timestamp.
+  //
+  // Auth: not required (public endpoint).
+  //
+  // Rate limiting: failed attempts are counted per email. After the configured
+  // threshold, returns RESOURCE_EXHAUSTED until the window resets.
+  //
+  // Errors:
+  //   NOT_FOUND          — collection slug not registered
+  //   INVALID_ARGUMENT   — collection is not an auth collection
+  //   UNAUTHENTICATED    — invalid email or password (also returned for locked
+  //                        or unverified accounts to prevent state enumeration)
+  //   RESOURCE_EXHAUSTED — rate limit exceeded; try again later
   rpc Login (LoginRequest) returns (LoginResponse);
+
+  // Me validates a JWT token and returns the associated user document.
+  // Use this to verify a token is still valid and to fetch the current user.
+  //
+  // The token is read from the `authorization` metadata header first;
+  // if absent, falls back to the `token` field in the request body.
+  //
+  // Auth: the token in MeRequest.token is the auth credential.
+  //
+  // Errors:
+  //   UNAUTHENTICATED — token is invalid, malformed, or expired
+  //   NOT_FOUND       — user record no longer exists (deleted after token issue)
   rpc Me (MeRequest) returns (MeResponse);
+
+  // ForgotPassword initiates the password reset flow for a user email.
+  // Generates a single-use nanoid reset token (NOT a JWT), stores it with a
+  // 1-hour expiry, and sends a reset email via SMTP.
+  //
+  // Always returns success=true regardless of whether the email exists, to
+  // prevent user enumeration. Rate-limited per email address.
+  //
+  // Requires email to be configured in crap.toml [email] section. If SMTP
+  // is not configured, the token is generated but no email is sent.
+  //
+  // Auth: not required (public endpoint).
+  //
+  // Errors:
+  //   NOT_FOUND        — collection slug not registered
+  //   INVALID_ARGUMENT — collection is not an auth collection, or forgot_password
+  //                      not enabled for the collection
+  //   PERMISSION_DENIED — password reset is disabled for this collection
   rpc ForgotPassword (ForgotPasswordRequest) returns (ForgotPasswordResponse);
+
+  // ResetPassword sets a new password using a valid reset token previously
+  // issued by ForgotPassword. The token is single-use and expires after 1 hour.
+  // Password must satisfy the configured password policy (minimum length, etc.).
+  //
+  // Auth: not required (uses the reset token in the request body).
+  //
+  // Errors:
+  //   NOT_FOUND        — collection slug not registered
+  //   INVALID_ARGUMENT — collection not an auth collection, invalid/expired token,
+  //                      or password fails policy validation
   rpc ResetPassword (ResetPasswordRequest) returns (ResetPasswordResponse);
+
+  // VerifyEmail confirms an email address using a verification token sent
+  // during user creation. Required when verify_email=true is set in the
+  // collection auth config. Unverified users cannot log in.
+  //
+  // Auth: not required (uses the verification token in the request body).
+  //
+  // Errors:
+  //   NOT_FOUND        — collection slug not registered, or token not found /
+  //                      expired (success=false also returned for invalid tokens)
+  //   INVALID_ARGUMENT — collection not an auth collection, or email verification
+  //                      not enabled for the collection
   rpc VerifyEmail (VerifyEmailRequest) returns (VerifyEmailResponse);
+
+  // ListCollections returns metadata for all registered collections and globals.
+  // No auth required; this is a registry-level read from in-memory definitions.
+  // Does not reflect database state — structure comes from Lua definitions loaded
+  // at startup.
   rpc ListCollections (ListCollectionsRequest) returns (ListCollectionsResponse);
+
+  // DescribeCollection returns the full schema (fields, types, options, blocks)
+  // for a single collection or global. Set is_global=true to describe a global.
+  // No auth required; reads from in-memory Lua-defined registry.
+  //
+  // Errors:
+  //   NOT_FOUND — slug not registered (as collection or global, per is_global)
   rpc DescribeCollection (DescribeCollectionRequest) returns (DescribeCollectionResponse);
+
+  // Count returns the number of documents matching optional filters.
+  // Respects collection-level read access and draft filtering.
+  //
+  // Auth: optional. Access functions are evaluated when a token is present.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered
+  //   PERMISSION_DENIED — read access denied
+  //   INVALID_ARGUMENT  — malformed where clause
+  //   UNAVAILABLE       — transient DB error; retry
   rpc Count (CountRequest) returns (CountResponse);
+
+  // UpdateMany bulk-updates all documents matching the where filter.
+  // All matching documents are updated in a single transaction (all-or-nothing).
+  // Fires per-document before_change / after_change hooks by default.
+  // Set hooks=false to skip hooks for performance on large batch operations.
+  //
+  // Access is checked twice: read access to find matching docs, then update
+  // access per document (all must pass, or the whole operation is denied).
+  //
+  // Auth: optional. Read and update access functions are evaluated.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered
+  //   PERMISSION_DENIED — read or update access denied for any matching document
+  //   INVALID_ARGUMENT  — malformed where clause
+  //   UNAVAILABLE       — transient DB error; retry
   rpc UpdateMany (UpdateManyRequest) returns (UpdateManyResponse);
+
+  // DeleteMany bulk-deletes all documents matching the where filter.
+  // All deletions run in a single transaction (all-or-nothing).
+  // Fires per-document before_delete / after_delete hooks by default.
+  // Set hooks=false to skip hooks for performance on large batch operations.
+  //
+  // Access is checked twice: read access to find matching docs, then delete
+  // access per document (all must pass, or the whole operation is denied).
+  //
+  // Auth: optional. Read and delete access functions are evaluated.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered
+  //   PERMISSION_DENIED — read or delete access denied for any matching document
+  //   INVALID_ARGUMENT  — malformed where clause
+  //   UNAVAILABLE       — transient DB error; retry
   rpc DeleteMany (DeleteManyRequest) returns (DeleteManyResponse);
+
+  // Subscribe opens a server-streaming connection that receives MutationEvents
+  // for document creates, updates, and deletes in real time.
+  //
+  // Collection read access is evaluated once at subscribe time (snapshot).
+  // Only events for accessible collections/globals are delivered to the stream.
+  // The stream remains open until the client disconnects or the server shuts down.
+  //
+  // Requires live updates to be enabled in crap.toml ([live] section).
+  //
+  // Auth: required when the target collections enforce read access.
+  // Pass a valid JWT in SubscribeRequest.token (not in metadata).
+  //
+  // Errors:
+  //   UNAUTHENTICATED   — token is present but invalid or expired
+  //   PERMISSION_DENIED — no accessible collections or globals after access checks
+  //   UNAVAILABLE       — live updates disabled (no event bus configured)
   rpc Subscribe (SubscribeRequest) returns (stream MutationEvent);
+
+  // ListVersions returns the version history of a document in a collection
+  // with versioning enabled (drafts.enabled=true in Lua definition).
+  //
+  // Auth: optional. Collection-level read access is enforced.
+  //
+  // Errors:
+  //   NOT_FOUND              — collection slug not registered
+  //   PERMISSION_DENIED      — read access denied
+  //   FAILED_PRECONDITION    — collection does not have versioning enabled
+  //   UNAVAILABLE            — transient DB error; retry
   rpc ListVersions (ListVersionsRequest) returns (ListVersionsResponse);
+
+  // RestoreVersion replaces the document's current content with a snapshot
+  // from a previous version. Creates a new version entry for the restore.
+  //
+  // Auth: optional. Collection-level update access is enforced.
+  //
+  // Errors:
+  //   NOT_FOUND           — collection slug not registered, or version_id not found
+  //   PERMISSION_DENIED   — update access denied
+  //   FAILED_PRECONDITION — collection does not have versioning enabled
+  //   UNAVAILABLE         — transient DB error; retry
   rpc RestoreVersion (RestoreVersionRequest) returns (RestoreVersionResponse);
+
+  // ListJobs returns all registered job definitions and their configuration.
+  //
+  // Auth: required. Any valid JWT is accepted (no per-job access check).
+  //
+  // Errors:
+  //   UNAUTHENTICATED — no valid Bearer token provided
   rpc ListJobs (ListJobsRequest) returns (ListJobsResponse);
+
+  // TriggerJob queues a job for immediate execution by slug.
+  // The job is inserted into the _crap_jobs table and picked up by the scheduler.
+  //
+  // Auth: required. Job-level access functions are evaluated when configured.
+  //
+  // Errors:
+  //   UNAUTHENTICATED   — no valid Bearer token provided
+  //   NOT_FOUND         — job slug not registered
+  //   PERMISSION_DENIED — job-level access function denied
   rpc TriggerJob (TriggerJobRequest) returns (TriggerJobResponse);
+
+  // GetJobRun fetches the status and result of a specific job run by its ID.
+  //
+  // Auth: required. Any valid JWT is accepted.
+  //
+  // Errors:
+  //   UNAUTHENTICATED — no valid Bearer token provided
+  //   NOT_FOUND       — job run ID not found
   rpc GetJobRun (GetJobRunRequest) returns (GetJobRunResponse);
+
+  // ListJobRuns lists job execution history with optional filters.
+  // Defaults to the 50 most recent runs when no limit is specified.
+  //
+  // Auth: required. Any valid JWT is accepted.
+  //
+  // Errors:
+  //   UNAUTHENTICATED — no valid Bearer token provided
   rpc ListJobRuns (ListJobRunsRequest) returns (ListJobRunsResponse);
 }
 
+// FindRequest queries documents from a collection.
+//
+// Pagination modes (mutually exclusive):
+//   Page-based:   set `page` (1-indexed). Returns total_pages, prev_page, next_page.
+//   Cursor-based: set `after_cursor` OR `before_cursor` from a previous response's
+//                 PaginationInfo.end_cursor / start_cursor. Cannot combine with `page`.
+//
+// If neither cursors nor page are specified, defaults to page 1.
+// Cursor mode is enabled server-side via crap.toml [pagination] cursor=true.
+// When cursor mode is active, page-based fields in PaginationInfo are absent.
 message FindRequest {
+  // The collection slug (as defined in the Lua collection definition).
   string collection = 1;
+
+  // Optional JSON filter clause. The filter is a JSON object where keys are
+  // field names and values are either a string (shorthand equals) or an object
+  // with an operator key.
+  //
+  // Supported operators:
+  //   equals              — exact match (also the shorthand: "field": "value")
+  //   not_equals          — not equal
+  //   like                — SQL LIKE pattern (use % as wildcard)
+  //   contains            — substring match (wraps value in %...%)
+  //   greater_than        — numeric or string greater-than
+  //   less_than           — numeric or string less-than
+  //   greater_than_or_equal
+  //   less_than_or_equal
+  //   in                  — value must be an array: {"status": {"in": ["a","b"]}}
+  //   not_in              — value must be an array
+  //   exists              — field is not NULL
+  //   not_exists          — field is NULL
+  //
+  // OR groups:
+  //   {"or": [{"status": "active"}, {"status": "pending"}]}
+  //
+  // Multiple top-level keys are ANDed together.
+  // Dot notation for nested fields: "group.field" or "block.field".
+  //
+  // Examples:
+  //   {"status": "published"}
+  //   {"age": {"greater_than": "18"}}
+  //   {"tags": {"in": ["rust", "cms"]}}
+  //   {"or": [{"role": "admin"}, {"role": "editor"}]}
   optional string where = 2;
+
+  // Sort expression. Prefix with `-` for descending order.
+  // Defaults to created_at DESC (for timestamped collections) or id ASC.
+  //
+  // Examples:  "title"  (ascending),  "-created_at"  (newest first)
   optional string order_by = 3;
+
+  // Maximum number of documents to return per page.
+  // Clamped to server-configured max_limit (default 1000).
+  // Defaults to server-configured default_limit (default 20).
   optional int64 limit = 4;
+
+  // 1-indexed page number for page-based pagination.
+  // Mutually exclusive with after_cursor and before_cursor.
+  // Defaults to 1 when neither page nor cursors are specified.
   optional int64 page = 5;
+
+  // Relationship population depth. 0 = IDs only (default for Find).
+  // 1 = populate immediate relationship fields with full documents.
+  // Higher values recurse further; capped by server max_depth config.
+  // See crap.toml [depth] section.
   optional int32 depth = 6;
+
+  // BCP-47 locale code for localized fields (e.g., "en", "fr", "pt-BR").
+  // Falls back to the configured default locale when omitted.
   optional string locale = 7;
+
+  // Field projection: only return the listed field names.
+  // Empty list returns all fields (default).
   repeated string select = 8;
+
+  // When true, includes draft documents (requires drafts enabled on collection).
+  // Defaults to false — only published documents are returned.
   optional bool draft = 9;
+
+  // Opaque cursor for forward pagination (page to the next page).
+  // Obtain from PaginationInfo.end_cursor in a previous response.
+  // Mutually exclusive with before_cursor and page.
+  // Only effective when cursor pagination is enabled server-side.
   optional string after_cursor = 10;
+
+  // Opaque cursor for backward pagination (page to the previous page).
+  // Obtain from PaginationInfo.start_cursor in a previous response.
+  // Mutually exclusive with after_cursor and page.
+  // Only effective when cursor pagination is enabled server-side.
   optional string before_cursor = 11;
+
+  // Full-text search query string. When set, results are ranked by relevance
+  // against the collection's full-text search index.
   optional string search = 12;
 }
 
+// PaginationInfo carries pagination state returned alongside every Find response.
+//
+// In page-based mode: total_pages, page, page_start, prev_page, next_page are set.
+// In cursor-based mode: start_cursor and end_cursor are set; page fields are absent.
 message PaginationInfo {
+  // Total number of documents matching the query (before pagination).
   int64 total_docs = 1;
+
+  // The effective limit applied to this page.
   int64 limit = 2;
+
+  // Total number of pages (page-based mode only).
   optional int64 total_pages = 3;
+
+  // Current page number, 1-indexed (page-based mode only).
   optional int64 page = 4;
+
+  // 1-indexed position of the first document on this page (page-based mode only).
+  // For example, page 2 with limit 10 has page_start=11.
   optional int64 page_start = 5;
+
+  // True if there is a previous page / earlier cursor page.
   bool has_prev_page = 6;
+
+  // True if there is a next page / later cursor page.
   bool has_next_page = 7;
+
+  // Previous page number (page-based mode only; absent when on page 1).
   optional int64 prev_page = 8;
+
+  // Next page number (page-based mode only; absent when on the last page).
   optional int64 next_page = 9;
+
+  // Opaque cursor pointing before the first document in this result set.
+  // Pass as before_cursor in the next request to page backward.
+  // (Cursor mode only.)
   optional string start_cursor = 10;
+
+  // Opaque cursor pointing after the last document in this result set.
+  // Pass as after_cursor in the next request to page forward.
+  // (Cursor mode only.)
   optional string end_cursor = 11;
 }
 
+// FindResponse wraps the returned document list and pagination metadata.
 message FindResponse {
+  // The matched documents, in the requested sort order.
   repeated Document documents = 1;
+
+  // Pagination state for the current result page.
   PaginationInfo pagination = 2;
 }
 
+// FindByIDRequest fetches a single document by its nanoid primary key.
 message FindByIDRequest {
+  // The collection slug.
   string collection = 1;
+
+  // The document's nanoid ID.
   string id = 2;
+
+  // Relationship population depth. Defaults to the server's default_depth
+  // config value (typically 1 for FindByID, unlike Find which defaults to 0).
   optional int32 depth = 3;
+
+  // BCP-47 locale code for localized fields.
   optional string locale = 4;
+
+  // Field projection: only return the listed field names. Empty = all fields.
   repeated string select = 5;
+
+  // When true, loads the latest draft version snapshot instead of the published
+  // document (only applicable to collections with drafts and versions enabled).
   optional bool draft = 6;
 }
 
+// FindByIDResponse wraps the returned document. When no document exists for
+// the given ID, the server returns a NOT_FOUND (code 5) gRPC status error.
 message FindByIDResponse {
+  // The matching document.
   optional Document document = 1;
 }
 
+// CreateRequest inserts a new document into a collection.
 message CreateRequest {
+  // The collection slug.
   string collection = 1;
+
+  // Document field values as a protobuf Struct (JSON-compatible key/value map).
+  // For auth collections, include a "password" key; it is extracted before
+  // hooks run and stored as an Argon2id hash in a hidden column.
   google.protobuf.Struct data = 2;
+
+  // BCP-47 locale for localized field writes.
   optional string locale = 3;
+
+  // When true, saves the document as a draft (status=draft) rather than
+  // publishing it immediately. Only applies when drafts are enabled.
   optional bool draft = 4;
 }
 
+// CreateResponse returns the newly created document with its assigned ID.
 message CreateResponse {
+  // The created document, including server-assigned ID and timestamps.
   Document document = 1;
 }
 
+// UpdateRequest modifies an existing document.
 message UpdateRequest {
+  // The collection slug.
   string collection = 1;
+
+  // The document's nanoid ID.
   string id = 2;
+
+  // Updated field values. Only provided fields are written; others are unchanged
+  // (partial update semantics). For auth collections, "password" is handled
+  // specially — empty string means keep the existing password unchanged.
   google.protobuf.Struct data = 3;
+
+  // BCP-47 locale for localized field writes.
   optional string locale = 4;
+
+  // When true, saves changes as a draft version (does not publish).
   optional bool draft = 5;
+
+  // When true, transitions a published document back to draft status without
+  // modifying field data. Ignored if the collection does not have versions enabled.
   optional bool unpublish = 6;
 }
 
+// UpdateResponse returns the document after applying the update.
 message UpdateResponse {
+  // The updated document.
   Document document = 1;
 }
 
+// DeleteRequest removes a document by ID.
+// For collections with `soft_delete = true`, this moves the document to trash
+// unless `force_hard_delete` is set. Requires `access.trash` for soft delete
+// or `access.delete` for permanent deletion.
 message DeleteRequest {
+  // The collection slug.
   string collection = 1;
+
+  // The document's nanoid ID.
+  string id = 2;
+
+  // When true, permanently delete even if the collection has soft_delete enabled.
+  // Requires `access.delete` permission (not just `access.trash`).
+  bool force_hard_delete = 3;
+}
+
+// DeleteResponse confirms the deletion.
+message DeleteResponse {
+  // True if the document was successfully deleted (or soft-deleted).
+  bool success = 1;
+
+  // True if the document was soft-deleted (moved to trash) rather than permanently deleted.
+  bool soft_deleted = 2;
+}
+
+// RestoreRequest restores a soft-deleted document from trash.
+// Only works on collections with `soft_delete = true`.
+// Requires `access.trash` permission (falls back to `access.update`).
+message RestoreRequest {
+  // The collection slug.
+  string collection = 1;
+
+  // The document's nanoid ID.
   string id = 2;
 }
 
-message DeleteResponse {
-  bool success = 1;
+// RestoreResponse confirms the restoration.
+message RestoreResponse {
+  // The restored document.
+  Document document = 1;
 }
 
+// GetGlobalRequest retrieves the singleton document for a global.
 message GetGlobalRequest {
+  // The global slug (as defined in the Lua global definition).
   string slug = 1;
+
+  // BCP-47 locale for localized field reads.
   optional string locale = 2;
 }
 
+// GetGlobalResponse wraps the global's document.
 message GetGlobalResponse {
+  // The global document. Always present (globals are auto-created on first access).
   Document document = 1;
 }
 
+// UpdateGlobalRequest writes new values to the global document.
 message UpdateGlobalRequest {
+  // The global slug.
   string slug = 1;
+
+  // Updated field values (partial update semantics).
   google.protobuf.Struct data = 2;
+
+  // BCP-47 locale for localized field writes.
   optional string locale = 3;
 }
 
+// UpdateGlobalResponse returns the global document after the update.
 message UpdateGlobalResponse {
+  // The updated global document.
   Document document = 1;
 }
 
+// LoginRequest authenticates a user in an auth-enabled collection.
 message LoginRequest {
+  // The auth collection slug (must have auth=true in its Lua definition).
   string collection = 1;
+
+  // The user's email address.
   string email = 2;
+
+  // The user's plaintext password.
   string password = 3;
 }
 
+// LoginResponse returns a JWT and the authenticated user's document.
 message LoginResponse {
+  // Signed JWT (HS256). Include in subsequent requests as:
+  //   Authorization: Bearer <token>   (gRPC metadata)
+  // Token lifetime is configurable in crap.toml [auth] token_expiry (default 7200s).
+  // Validate with the Me RPC; a new token requires a new Login call.
   string token = 1;
+
+  // The authenticated user document (fields visible to the response caller).
+  // Does NOT include the password hash — that column is always hidden.
   Document user = 2;
 }
 
+// MeRequest validates a JWT and returns the associated user.
+// The token is passed in the request body, not in gRPC metadata.
+// This is intentional: Me is used to bootstrap auth sessions where metadata
+// headers may not yet be available.
 message MeRequest {
+  // The JWT token previously issued by Login.
+  // Returns UNAUTHENTICATED if invalid, malformed, or past its expiry.
   string token = 1;
 }
 
+// MeResponse returns the current authenticated user document.
 message MeResponse {
+  // The user document associated with the token's sub claim.
   Document user = 1;
 }
 
+// ForgotPasswordRequest initiates a password reset flow.
 message ForgotPasswordRequest {
+  // The auth collection slug.
   string collection = 1;
+
+  // The email address to send the reset link to.
+  // Always returns success regardless of whether this email exists.
   string email = 2;
 }
 
+// ForgotPasswordResponse always indicates success to prevent user enumeration.
 message ForgotPasswordResponse {
+  // Always true. A false value is never returned — even if the email doesn't exist.
   bool success = 1;
 }
 
+// ResetPasswordRequest consumes a reset token to set a new password.
 message ResetPasswordRequest {
+  // The auth collection slug.
   string collection = 1;
+
+  // The nanoid reset token from the password reset email link.
+  // Single-use. Expires 1 hour after issuance.
   string token = 2;
+
+  // The new plaintext password. Must satisfy the configured password policy.
   string new_password = 3;
 }
 
+// ResetPasswordResponse confirms the password was updated.
 message ResetPasswordResponse {
+  // True if the password was successfully reset.
   bool success = 1;
 }
 
+// VerifyEmailRequest confirms an email address using a verification token.
 message VerifyEmailRequest {
+  // The auth collection slug (must have verify_email=true in auth config).
   string collection = 1;
+
+  // The verification token from the email sent at user creation.
+  // Single-use. Invalid/expired tokens result in success=false or NOT_FOUND.
   string token = 2;
 }
 
+// VerifyEmailResponse confirms the verification result.
 message VerifyEmailResponse {
+  // True if verification succeeded. False is not returned (NOT_FOUND is used
+  // for invalid or expired tokens instead).
   bool success = 1;
 }
 
+// CountRequest counts documents matching an optional filter.
 message CountRequest {
+  // The collection slug.
   string collection = 1;
+
+  // Optional JSON filter clause. Same syntax as FindRequest.where.
   optional string where = 2;
+
+  // BCP-47 locale for localized field filtering.
   optional string locale = 3;
+
+  // When true, includes draft documents in the count. Defaults to false.
   optional bool draft = 4;
+
+  // Full-text search query. When set, only documents matching the search
+  // are counted.
   optional string search = 5;
 }
 
+// CountResponse returns the number of matching documents.
 message CountResponse {
+  // Total document count matching the query (ignores pagination limits).
   int64 count = 1;
 }
 
+// UpdateManyRequest bulk-updates all documents matching a filter.
 message UpdateManyRequest {
+  // The collection slug.
   string collection = 1;
+
+  // Optional JSON filter clause. Same syntax as FindRequest.where.
+  // When omitted, all documents in the collection are updated.
   optional string where = 2;
+
+  // The field values to apply to all matching documents (partial update).
   google.protobuf.Struct data = 3;
+
+  // BCP-47 locale for localized field writes.
   optional string locale = 4;
+
+  // When true, saves changes as drafts. Defaults to false.
   optional bool draft = 5;
+
+  // Run per-document lifecycle hooks (before_change, after_change).
+  // Default: true (hooks run). Set to false to skip for performance.
+  optional bool hooks = 6;
 }
 
+// UpdateManyResponse reports the number of documents modified.
 message UpdateManyResponse {
+  // Number of documents updated in this operation.
   int64 modified = 1;
 }
 
+// DeleteManyRequest bulk-deletes all documents matching a filter.
 message DeleteManyRequest {
+  // The collection slug.
   string collection = 1;
+
+  // Optional JSON filter clause. Same syntax as FindRequest.where.
+  // When omitted, all documents in the collection are deleted.
   optional string where = 2;
+
+  // Run per-document lifecycle hooks (before_delete, after_delete).
+  // Default: true (hooks run). Set to false to skip for performance.
+  optional bool hooks = 3;
+
+  // When true, permanently delete even if the collection has soft_delete enabled.
+  // Requires `access.delete` permission (not just `access.trash`).
+  bool force_hard_delete = 4;
 }
 
+// DeleteManyResponse reports the number of documents deleted.
 message DeleteManyResponse {
+  // Number of documents permanently deleted in this operation.
   int64 deleted = 1;
+
+  // Number of documents soft-deleted (moved to trash) in this operation.
+  int64 soft_deleted = 2;
+
+  // Number of documents skipped because they are still referenced by other documents.
+  int64 skipped = 3;
 }
 
+// Document represents a single CMS document as returned by the API.
+// Relationship fields with depth=0 contain string IDs.
+// With depth >= 1, relationship fields contain nested Document objects.
 message Document {
+  // The document's nanoid primary key.
   string id = 1;
+
+  // The collection slug this document belongs to.
   string collection = 2;
+
+  // All field values as a JSON-compatible Struct.
+  // Field-level access control (read) is applied before this is populated.
+  // Password and other hidden columns are never included.
   google.protobuf.Struct fields = 3;
+
+  // ISO-8601 UTC creation timestamp (e.g., "2024-01-15T10:30:00Z").
+  // Absent when the collection has timestamps=false.
   optional string created_at = 4;
+
+  // ISO-8601 UTC last-update timestamp.
+  // Absent when the collection has timestamps=false.
   optional string updated_at = 5;
 }
 
+// ListCollectionsRequest has no parameters — returns all registered collections and globals.
 message ListCollectionsRequest {}
 
+// ListCollectionsResponse returns summary metadata for all collections and globals.
 message ListCollectionsResponse {
+  // All registered collection definitions, sorted by slug.
   repeated CollectionInfo collections = 1;
+
+  // All registered global definitions, sorted by slug.
   repeated GlobalInfo globals = 2;
 }
 
+// CollectionInfo is a lightweight summary of a collection definition.
 message CollectionInfo {
+  // The collection slug (used in all other RPC requests).
   string slug = 1;
+
+  // Human-readable singular label (e.g., "Post"), from Lua definition.
   optional string singular_label = 2;
+
+  // Human-readable plural label (e.g., "Posts"), from Lua definition.
   optional string plural_label = 3;
+
+  // True if the collection adds created_at / updated_at timestamp columns.
   bool timestamps = 4;
+
+  // True if the collection is an auth collection (email/password login enabled).
   bool auth = 5;
+
+  // True if the collection is an upload collection (file uploads enabled).
   bool upload = 6;
 }
 
+// GlobalInfo is a lightweight summary of a global definition.
 message GlobalInfo {
+  // The global slug (used in GetGlobal / UpdateGlobal requests).
   string slug = 1;
+
+  // Human-readable singular label, from Lua definition.
   optional string singular_label = 2;
+
+  // Human-readable plural label, from Lua definition.
   optional string plural_label = 3;
 }
 
+// DescribeCollectionRequest identifies the collection or global to describe.
 message DescribeCollectionRequest {
+  // The collection or global slug.
   string slug = 1;
+
+  // Set to true to describe a global instead of a collection.
   bool is_global = 2;
 }
 
+// DescribeCollectionResponse returns full schema information including all fields.
 message DescribeCollectionResponse {
+  // The slug identifying this collection or global.
   string slug = 1;
+
+  // Human-readable singular label.
   optional string singular_label = 2;
+
+  // Human-readable plural label.
   optional string plural_label = 3;
+
+  // True if the collection has timestamp columns. Always false for globals.
   bool timestamps = 4;
+
+  // True if the collection is an auth collection. Always false for globals.
   bool auth = 5;
+
+  // All field definitions for this collection or global, in definition order.
+  // Nested fields (groups, arrays, blocks, tabs) are represented recursively
+  // via the FieldInfo.fields sub-field.
   repeated FieldInfo fields = 6;
+
+  // True if the collection is an upload collection. Always false for globals.
   bool upload = 7;
+
+  // True if draft/versioning is enabled for the collection.
   bool drafts = 8;
 }
 
+// FieldInfo describes a single field from a collection or global definition.
 message FieldInfo {
+  // The field name (column name in the database, key in Document.fields).
   string name = 1;
+
+  // The field type string as defined in Lua.
+  // Common values: text, textarea, richtext, number, email, checkbox, select,
+  //   radio, date, relationship, array, group, blocks, tabs, json,
+  //   upload, code, row, collapsible, join.
   string type = 2;
+
+  // True if the field is required (non-empty validation enforced).
   bool required = 3;
+
+  // True if the field value must be unique across the collection.
   bool unique = 4;
+
+  // For relationship fields: the target collection slug.
+  // Absent for non-relationship fields.
   optional string relationship_collection = 5;
+
+  // For relationship fields: true if the field holds multiple documents
+  // (stored in a join table), false if it holds a single document ID.
+  // Absent for non-relationship fields.
   optional bool relationship_has_many = 6;
+
+  // For select/multiselect fields: the available options.
   repeated SelectOptionInfo options = 7;
+
+  // Sub-fields for group, array, tabs (flattened), and block fields.
+  // For blocks, sub-field definitions are carried in BlockInfo.fields instead.
   repeated FieldInfo fields = 8;
+
+  // For relationship fields: maximum population depth for this specific field,
+  // overriding the request-level depth. Absent if no per-field cap is set.
   optional int32 relationship_max_depth = 9;
+
+  // For blocks fields: the available block type definitions.
   repeated BlockInfo blocks = 10;
+
+  // True if this field stores locale-specific values.
   bool localized = 11;
 }
 
+// BlockInfo describes a single block type within a blocks field.
 message BlockInfo {
+  // The block type identifier (used as the discriminator in stored data).
   string block_type = 1;
+
+  // Human-readable label for the block type.
   optional string label = 2;
+
+  // The fields contained within this block type.
   repeated FieldInfo fields = 3;
+
+  // Optional group name for organizing block types in the admin UI picker.
   optional string group = 4;
+
+  // Optional URL for a preview image shown in the block type picker.
   optional string image_url = 5;
 }
 
+// SelectOptionInfo describes one option in a select or multiselect field.
 message SelectOptionInfo {
+  // Human-readable label displayed in the admin UI.
   string label = 1;
+
+  // The stored value written to the database.
   string value = 2;
 }
 
+// SubscribeRequest opens a real-time event stream.
+// Access is evaluated once at subscribe time; the set of accessible collections
+// is fixed for the lifetime of the stream.
 message SubscribeRequest {
+  // Collection slugs to subscribe to. Empty = subscribe to all accessible collections.
   repeated string collections = 1;
+
+  // Global slugs to subscribe to. Empty = subscribe to all accessible globals.
   repeated string globals = 2;
+
+  // Operation types to receive: "create", "update", "delete".
+  // Empty = subscribe to all three operation types.
   repeated string operations = 3;
+
+  // JWT token for auth. Required when target collections enforce read access.
+  // Passed in the request body because gRPC streaming metadata is sent once
+  // at stream open — this avoids per-message auth overhead.
+  // Returns UNAUTHENTICATED if the token is invalid or expired.
+  // Pass an empty string for unauthenticated subscriptions (public collections only).
   string token = 4;
 }
 
+// MutationEvent is a single real-time event delivered on the Subscribe stream.
 message MutationEvent {
+  // Monotonically increasing server-assigned sequence number.
+  // Use to detect gaps when a subscriber lags and events are dropped.
   uint64 sequence = 1;
+
+  // ISO-8601 UTC timestamp of when the mutation occurred on the server.
   string timestamp = 2;
+
+  // The target type: "collection" or "global".
   string target = 3;
+
+  // The operation: "create", "update", or "delete".
   string operation = 4;
+
+  // The collection or global slug that was mutated.
   string collection = 5;
+
+  // The nanoid ID of the affected document.
   string document_id = 6;
+
+  // The document field values at the time of the event.
+  // For delete events, this is an empty struct.
   google.protobuf.Struct data = 7;
 }
 
+// ListVersionsRequest retrieves the version history of a specific document.
 message ListVersionsRequest {
+  // The collection slug (must have versioning/drafts enabled).
   string collection = 1;
+
+  // The document's nanoid ID.
   string id = 2;
+
+  // Maximum number of versions to return. Defaults to all versions when absent.
   optional int64 limit = 3;
 }
 
+// ListVersionsResponse contains the version list in reverse-chronological order.
 message ListVersionsResponse {
+  // Versions sorted newest-first.
   repeated VersionInfo versions = 1;
 }
 
+// VersionInfo summarizes a single version snapshot.
 message VersionInfo {
+  // The version record's nanoid ID. Pass to RestoreVersion.version_id.
   string id = 1;
+
+  // Monotonically increasing version number within the document's history.
   int64 version = 2;
+
+  // Publication status at the time this version was saved: "published" or "draft".
   string status = 3;
+
+  // True if this is the most recent version (the current live snapshot).
   bool latest = 4;
+
+  // ISO-8601 UTC timestamp when this version was created.
   string created_at = 5;
 }
 
+// RestoreVersionRequest replaces a document's content with a historical snapshot.
 message RestoreVersionRequest {
+  // The collection slug (must have versioning enabled).
   string collection = 1;
+
+  // The nanoid ID of the document to restore.
   string document_id = 2;
+
+  // The nanoid ID of the version to restore from (from VersionInfo.id).
   string version_id = 3;
 }
 
+// RestoreVersionResponse returns the document after restoration.
 message RestoreVersionResponse {
+  // The document with restored field values and a new updated_at timestamp.
   Document document = 1;
 }
 
+// ListJobsRequest has no parameters — returns all registered job definitions.
 message ListJobsRequest {}
 
+// ListJobsResponse contains all registered job definitions.
 message ListJobsResponse {
+  // All defined jobs, in registration order.
   repeated JobDefinitionInfo jobs = 1;
 }
 
+// JobDefinitionInfo describes a registered background job's static configuration.
 message JobDefinitionInfo {
+  // The job slug used to trigger and identify the job.
   string slug = 1;
+
+  // Lua function reference for the job handler.
   string handler = 2;
+
+  // Cron schedule expression (e.g., "0 * * * *" for hourly).
+  // Absent for jobs that are only triggered manually.
   optional string schedule = 3;
+
+  // Queue name this job runs on (default: "default").
   string queue = 4;
+
+  // Number of retry attempts after failure. 0 = no retries.
   uint32 retries = 5;
+
+  // Maximum execution time in seconds before the job is considered timed out.
   uint64 timeout = 6;
+
+  // Maximum number of simultaneous runs of this job.
   uint32 concurrency = 7;
+
+  // When true, a new run is skipped if another run of this job is already active.
   bool skip_if_running = 8;
+
+  // Human-readable label for the job (from Lua definition labels.singular).
   optional string label = 9;
 }
 
+// TriggerJobRequest queues a job for immediate execution.
 message TriggerJobRequest {
+  // The job slug to trigger.
   string slug = 1;
+
+  // Optional JSON-serialized input data passed to the job handler as its argument.
+  // Defaults to "{}" when absent.
   optional string data_json = 2;
 }
 
+// TriggerJobResponse returns the ID of the newly created job run.
 message TriggerJobResponse {
+  // Nanoid ID of the queued job run. Use with GetJobRun to poll status.
   string job_id = 1;
 }
 
+// GetJobRunRequest fetches a single job run by its ID.
 message GetJobRunRequest {
+  // The nanoid job run ID (from TriggerJobResponse.job_id or ListJobRuns).
   string id = 1;
 }
 
+// GetJobRunResponse contains the full state of a job execution.
 message GetJobRunResponse {
+  // Nanoid ID of this job run.
   string id = 1;
+
+  // The job slug that produced this run.
   string slug = 2;
+
+  // Current execution status: "pending", "running", "completed", "failed".
   string status = 3;
+
+  // JSON-serialized input data passed to the handler.
   string data_json = 4;
+
+  // JSON-serialized return value from the handler (absent if not yet completed).
   optional string result_json = 5;
+
+  // Error message if the job failed. Absent on success.
   optional string error = 6;
+
+  // Current attempt number (1-indexed). Increments on each retry.
   uint32 attempt = 7;
+
+  // Total allowed attempts (retries + 1).
   uint32 max_attempts = 8;
+
+  // How this run was initiated: "grpc", "cron", or "admin".
   optional string scheduled_by = 9;
+
+  // ISO-8601 UTC timestamp when the job run was created.
   optional string created_at = 10;
+
+  // ISO-8601 UTC timestamp when execution started. Absent if still pending.
   optional string started_at = 11;
+
+  // ISO-8601 UTC timestamp when execution finished. Absent if still running.
   optional string completed_at = 12;
 }
 
+// ListJobRunsRequest filters the job run history.
 message ListJobRunsRequest {
+  // Filter by job slug. Absent = all job slugs.
   optional string slug = 1;
+
+  // Filter by status: "pending", "running", "completed", "failed".
+  // Absent = all statuses.
   optional string status = 2;
+
+  // Maximum runs to return. Defaults to 50.
   optional int64 limit = 3;
+
+  // Number of runs to skip (for manual pagination). Defaults to 0.
   optional int64 offset = 4;
 }
 
+// ListJobRunsResponse contains a page of job run history.
 message ListJobRunsResponse {
+  // Job runs matching the filter, newest first.
   repeated GetJobRunResponse runs = 1;
 }

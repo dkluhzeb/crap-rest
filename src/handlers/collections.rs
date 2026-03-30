@@ -37,6 +37,7 @@ pub fn routes() -> Router<AppState> {
         .route("/collections/{slug}", post(create))
         .route("/collections/{slug}/{id}", patch(update))
         .route("/collections/{slug}/{id}", delete(delete_doc))
+        .route("/collections/{slug}/{id}/restore", post(restore))
         .route("/collections/{slug}/bulk", patch(update_many))
         .route("/collections/{slug}/bulk", delete(delete_many))
 }
@@ -215,9 +216,15 @@ async fn update(
     }
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub struct DeleteParams {
+    pub force: Option<bool>,
+}
+
 async fn delete_doc(
     State(client): State<GrpcClient>,
     Path((slug, id)): Path<(String, String)>,
+    Query(params): Query<DeleteParams>,
     headers: HeaderMap,
 ) -> RestResult<Json<Value>> {
     let req = make_request(
@@ -225,11 +232,35 @@ async fn delete_doc(
         proto::DeleteRequest {
             collection: slug,
             id,
+            force_hard_delete: params.force.unwrap_or(false),
         },
     );
 
     let resp = client.client().delete(req).await?.into_inner();
-    Ok(Json(serde_json::json!({ "success": resp.success })))
+    Ok(Json(serde_json::json!({
+        "success": resp.success,
+        "softDeleted": resp.soft_deleted,
+    })))
+}
+
+async fn restore(
+    State(client): State<GrpcClient>,
+    Path((slug, id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> RestResult<Json<Value>> {
+    let req = make_request(
+        &headers,
+        proto::RestoreRequest {
+            collection: slug,
+            id,
+        },
+    );
+
+    let resp = client.client().restore(req).await?.into_inner();
+    match resp.document {
+        Some(doc) => Ok(Json(document_to_json(&doc))),
+        None => Ok(Json(serde_json::json!({}))),
+    }
 }
 
 async fn update_many(
@@ -257,6 +288,7 @@ async fn update_many(
                 .and_then(|v| v.as_str())
                 .map(String::from),
             draft: body.get("draft").and_then(|v| v.as_bool()),
+            hooks: body.get("hooks").and_then(|v| v.as_bool()),
         },
     );
 
@@ -277,9 +309,21 @@ async fn delete_many(
         proto::DeleteManyRequest {
             collection: slug,
             r#where: where_clause,
+            hooks: body.get("hooks").and_then(|v| v.as_bool()),
+            force_hard_delete: body
+                .get("force_hard_delete")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
         },
     );
 
     let resp = client.client().delete_many(req).await?.into_inner();
-    Ok(Json(serde_json::json!({ "deleted": resp.deleted })))
+    let mut result = serde_json::json!({ "deleted": resp.deleted });
+    if resp.soft_deleted > 0 {
+        result["soft_deleted"] = serde_json::json!(resp.soft_deleted);
+    }
+    if resp.skipped > 0 {
+        result["skipped"] = serde_json::json!(resp.skipped);
+    }
+    Ok(Json(result))
 }
