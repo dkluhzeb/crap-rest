@@ -394,21 +394,21 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
             }),
         );
 
-        // Restore (soft-deleted documents)
-        let restore_doc_path = format!("/collections/{slug}/{{id}}/restore");
+        // Undelete (soft-deleted documents)
+        let undelete_doc_path = format!("/collections/{slug}/{{id}}/undelete");
         paths.insert(
-            restore_doc_path,
+            undelete_doc_path,
             json!({
                 "post": {
-                    "summary": format!("Restore {label} from trash"),
-                    "operationId": format!("restore_{slug}"),
+                    "summary": format!("Undelete {label} from trash"),
+                    "operationId": format!("undelete_{slug}"),
                     "tags": [slug],
                     "parameters": [
                         { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
                     ],
                     "responses": {
                         "200": {
-                            "description": "Restored document",
+                            "description": "Undeleted document",
                             "content": {
                                 "application/json": { "schema": schema_ref }
                             }
@@ -470,6 +470,49 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
                             "description": "Restored document",
                             "content": {
                                 "application/json": { "schema": schema_ref }
+                            }
+                        }
+                    }
+                }
+            }),
+        );
+
+        // Validate
+        let validate_path = format!("/collections/{slug}/validate");
+        paths.insert(
+            validate_path,
+            json!({
+                "post": {
+                    "summary": format!("Validate {label} fields"),
+                    "operationId": format!("validate_{slug}"),
+                    "tags": [slug],
+                    "requestBody": {
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "Field data to validate. Use _draft, _locale, _id as control fields."
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Validation result",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "valid": { "type": "boolean" },
+                                            "errors": {
+                                                "type": "object",
+                                                "additionalProperties": { "type": "string" }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -644,6 +687,48 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
                     }
                 }),
             );
+
+            let success_schema = json!({
+                "type": "object",
+                "properties": {
+                    "success": { "type": "boolean" }
+                }
+            });
+
+            let id_param = json!({
+                "name": "id", "in": "path", "required": true,
+                "schema": { "type": "string" }
+            });
+
+            for (action, summary) in [
+                ("lock", "Lock account"),
+                ("unlock", "Unlock account"),
+                ("verify", "Verify account"),
+                ("unverify", "Unverify account"),
+            ] {
+                paths.insert(
+                    format!("/auth/{slug}/{{id}}/{action}"),
+                    json!({
+                        "post": {
+                            "summary": summary,
+                            "operationId": format!("{action}_account_{slug}"),
+                            "tags": [&auth_tag],
+                            "security": [{ "bearer": [] }],
+                            "parameters": [id_param],
+                            "responses": {
+                                "200": {
+                                    "description": "Success",
+                                    "content": {
+                                        "application/json": {
+                                            "schema": success_schema
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }),
+                );
+            }
         }
     }
 

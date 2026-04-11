@@ -37,7 +37,8 @@ pub fn routes() -> Router<AppState> {
         .route("/collections/{slug}", post(create))
         .route("/collections/{slug}/{id}", patch(update))
         .route("/collections/{slug}/{id}", delete(delete_doc))
-        .route("/collections/{slug}/{id}/restore", post(restore))
+        .route("/collections/{slug}/{id}/undelete", post(undelete))
+        .route("/collections/{slug}/validate", post(validate))
         .route("/collections/{slug}/bulk", patch(update_many))
         .route("/collections/{slug}/bulk", delete(delete_many))
 }
@@ -243,24 +244,52 @@ async fn delete_doc(
     })))
 }
 
-async fn restore(
+async fn undelete(
     State(client): State<GrpcClient>,
     Path((slug, id)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> RestResult<Json<Value>> {
     let req = make_request(
         &headers,
-        proto::RestoreRequest {
+        proto::UndeleteRequest {
             collection: slug,
             id,
         },
     );
 
-    let resp = client.client().restore(req).await?.into_inner();
+    let resp = client.client().undelete(req).await?.into_inner();
     match resp.document {
         Some(doc) => Ok(Json(document_to_json(&doc))),
         None => Ok(Json(serde_json::json!({}))),
     }
+}
+
+async fn validate(
+    State(client): State<GrpcClient>,
+    Path(slug): Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> RestResult<Json<Value>> {
+    let data = json_to_struct(&body);
+    let req = make_request(
+        &headers,
+        proto::ValidateRequest {
+            collection: slug,
+            data,
+            draft: body.get("_draft").and_then(|v| v.as_bool()),
+            locale: body
+                .get("_locale")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            id: body.get("_id").and_then(|v| v.as_str()).map(String::from),
+        },
+    );
+
+    let resp = client.client().validate(req).await?.into_inner();
+    Ok(Json(serde_json::json!({
+        "valid": resp.valid,
+        "errors": resp.errors,
+    })))
 }
 
 async fn update_many(
