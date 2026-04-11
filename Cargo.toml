@@ -1,6 +1,6 @@
 [package]
 name = "crap-rest"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 edition = "2024"
 description = "RESTful JSON gateway for Crap CMS — proxies HTTP to gRPC"
 license = "MIT"

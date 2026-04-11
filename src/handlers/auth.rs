@@ -21,6 +21,10 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/{collection}/forgot-password", post(forgot_password))
         .route("/auth/{collection}/reset-password", post(reset_password))
         .route("/auth/{collection}/verify-email", post(verify_email))
+        .route("/auth/{collection}/{id}/lock", post(lock_account))
+        .route("/auth/{collection}/{id}/unlock", post(unlock_account))
+        .route("/auth/{collection}/{id}/verify", post(verify_account))
+        .route("/auth/{collection}/{id}/unverify", post(unverify_account))
 }
 
 #[derive(Deserialize)]
@@ -127,5 +131,49 @@ async fn verify_email(
     );
 
     let resp = client.client().verify_email(req).await?.into_inner();
+    Ok(Json(serde_json::json!({ "success": resp.success })))
+}
+
+async fn lock_account(
+    State(client): State<GrpcClient>,
+    Path((collection, id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> RestResult<Json<Value>> {
+    let req = make_request(&headers, proto::AccountActionRequest { collection, id });
+
+    let resp = client.client().lock_account(req).await?.into_inner();
+    Ok(Json(serde_json::json!({ "success": resp.success })))
+}
+
+async fn unlock_account(
+    State(client): State<GrpcClient>,
+    Path((collection, id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> RestResult<Json<Value>> {
+    let req = make_request(&headers, proto::AccountActionRequest { collection, id });
+
+    let resp = client.client().unlock_account(req).await?.into_inner();
+    Ok(Json(serde_json::json!({ "success": resp.success })))
+}
+
+async fn verify_account(
+    State(client): State<GrpcClient>,
+    Path((collection, id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> RestResult<Json<Value>> {
+    let req = make_request(&headers, proto::AccountActionRequest { collection, id });
+
+    let resp = client.client().verify_account(req).await?.into_inner();
+    Ok(Json(serde_json::json!({ "success": resp.success })))
+}
+
+async fn unverify_account(
+    State(client): State<GrpcClient>,
+    Path((collection, id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> RestResult<Json<Value>> {
+    let req = make_request(&headers, proto::AccountActionRequest { collection, id });
+
+    let resp = client.client().unverify_account(req).await?.into_inner();
     Ok(Json(serde_json::json!({ "success": resp.success })))
 }

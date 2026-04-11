@@ -103,7 +103,7 @@ service ContentAPI {
   //   UNAVAILABLE       — transient DB error; retry
   rpc Delete (DeleteRequest) returns (DeleteResponse);
 
-  // Restore un-deletes a soft-deleted document, moving it out of trash.
+  // Undelete un-deletes a soft-deleted document, moving it out of trash.
   // Only works on collections with `soft_delete = true`.
   //
   // Auth: optional. Trash access functions are evaluated when a token is present.
@@ -113,7 +113,7 @@ service ContentAPI {
   //   PERMISSION_DENIED    — trash access denied
   //   FAILED_PRECONDITION  — collection does not have soft_delete enabled
   //   UNAVAILABLE          — transient DB error; retry
-  rpc Restore (RestoreRequest) returns (RestoreResponse);
+  rpc Undelete (UndeleteRequest) returns (UndeleteResponse);
 
   // GetGlobal retrieves the single document for a global definition. Globals
   // have no collection CRUD; there is exactly one document per global slug.
@@ -352,6 +352,70 @@ service ContentAPI {
   // Errors:
   //   UNAUTHENTICATED — no valid Bearer token provided
   rpc ListJobRuns (ListJobRunsRequest) returns (ListJobRunsResponse);
+
+  // Validate checks field data against collection rules without persisting.
+  // Returns validation results with per-field error messages.
+  //
+  // Runs the full before-write pipeline (field stripping, field hooks,
+  // required/unique/custom validators) but does not open a write transaction.
+  // Use to preview validation errors before a Create or Update call.
+  //
+  // Auth: optional. If present, create/update access functions are evaluated.
+  // Field-level write-denied fields are stripped before validation runs.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered
+  //   PERMISSION_DENIED — access denied (when auth token is present)
+  //   UNAVAILABLE       — transient DB error; retry
+  rpc Validate (ValidateRequest) returns (ValidateResponse);
+
+  // LockAccount prevents a user from logging in.
+  // Only valid for auth-enabled collections.
+  //
+  // Auth: required. The caller must have a valid JWT.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered, or user ID not found
+  //   INVALID_ARGUMENT  — collection is not an auth collection
+  //   UNAUTHENTICATED   — no valid Bearer token provided
+  //   UNAVAILABLE       — transient DB error; retry
+  rpc LockAccount (AccountActionRequest) returns (AccountActionResponse);
+
+  // UnlockAccount re-enables login for a locked account.
+  // Only valid for auth-enabled collections.
+  //
+  // Auth: required. The caller must have a valid JWT.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered, or user ID not found
+  //   INVALID_ARGUMENT  — collection is not an auth collection
+  //   UNAUTHENTICATED   — no valid Bearer token provided
+  //   UNAVAILABLE       — transient DB error; retry
+  rpc UnlockAccount (AccountActionRequest) returns (AccountActionResponse);
+
+  // VerifyAccount marks a user's email as verified.
+  // Only valid for auth-enabled collections.
+  //
+  // Auth: required. The caller must have a valid JWT.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered, or user ID not found
+  //   INVALID_ARGUMENT  — collection is not an auth collection
+  //   UNAUTHENTICATED   — no valid Bearer token provided
+  //   UNAVAILABLE       — transient DB error; retry
+  rpc VerifyAccount (AccountActionRequest) returns (AccountActionResponse);
+
+  // UnverifyAccount marks a user's email as unverified.
+  // Only valid for auth-enabled collections.
+  //
+  // Auth: required. The caller must have a valid JWT.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered, or user ID not found
+  //   INVALID_ARGUMENT  — collection is not an auth collection
+  //   UNAUTHENTICATED   — no valid Bearer token provided
+  //   UNAVAILABLE       — transient DB error; retry
+  rpc UnverifyAccount (AccountActionRequest) returns (AccountActionResponse);
 }
 
 // FindRequest queries documents from a collection.
@@ -612,10 +676,10 @@ message DeleteResponse {
   bool soft_deleted = 2;
 }
 
-// RestoreRequest restores a soft-deleted document from trash.
+// UndeleteRequest undeletes a soft-deleted document from trash.
 // Only works on collections with `soft_delete = true`.
 // Requires `access.trash` permission (falls back to `access.update`).
-message RestoreRequest {
+message UndeleteRequest {
   // The collection slug.
   string collection = 1;
 
@@ -623,9 +687,9 @@ message RestoreRequest {
   string id = 2;
 }
 
-// RestoreResponse confirms the restoration.
-message RestoreResponse {
-  // The restored document.
+// UndeleteResponse confirms the undeletion.
+message UndeleteResponse {
+  // The undeleted document.
   Document document = 1;
 }
 
@@ -1081,6 +1145,8 @@ message ListVersionsRequest {
 message ListVersionsResponse {
   // Versions sorted newest-first.
   repeated VersionInfo versions = 1;
+  // Pagination metadata for the version list.
+  PaginationInfo pagination = 2;
 }
 
 // VersionInfo summarizes a single version snapshot.
@@ -1240,4 +1306,52 @@ message ListJobRunsRequest {
 message ListJobRunsResponse {
   // Job runs matching the filter, newest first.
   repeated GetJobRunResponse runs = 1;
+  // Pagination metadata for the job run list.
+  PaginationInfo pagination = 2;
+}
+
+// ValidateRequest checks field data against collection rules without persisting.
+message ValidateRequest {
+  // The collection slug.
+  string collection = 1;
+
+  // Document field values to validate (same format as CreateRequest.data).
+  google.protobuf.Struct data = 2;
+
+  // When true, validate as a draft (relaxes required-field checks for
+  // collections with drafts enabled).
+  optional bool draft = 3;
+
+  // BCP-47 locale code for localized field validation.
+  optional string locale = 4;
+
+  // When set, exclude this document ID from unique-field checks (update path).
+  // Omit for create validation.
+  optional string id = 5;
+}
+
+// ValidateResponse returns the validation result.
+message ValidateResponse {
+  // True when all validations passed. False when one or more field errors exist.
+  bool valid = 1;
+
+  // Per-field error messages. Keys are field names, values are human-readable
+  // error descriptions. Empty when valid=true.
+  map<string, string> errors = 2;
+}
+
+// AccountActionRequest identifies a user in an auth collection.
+// Used by LockAccount, UnlockAccount, VerifyAccount, UnverifyAccount.
+message AccountActionRequest {
+  // The auth collection slug.
+  string collection = 1;
+
+  // The user's nanoid ID.
+  string id = 2;
+}
+
+// AccountActionResponse confirms the account action succeeded.
+message AccountActionResponse {
+  // True when the operation completed successfully.
+  bool success = 1;
 }
