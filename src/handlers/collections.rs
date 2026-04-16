@@ -27,6 +27,7 @@ pub struct FindParams {
     pub after_cursor: Option<String>,
     pub before_cursor: Option<String>,
     pub search: Option<String>,
+    pub trash: Option<bool>,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -69,6 +70,7 @@ async fn find(
             after_cursor: params.after_cursor,
             before_cursor: params.before_cursor,
             search: params.search,
+            trash: params.trash,
         },
     );
 
@@ -151,6 +153,7 @@ async fn find_by_id(
             locale: params.locale,
             select,
             draft: params.draft,
+            trash: params.trash,
         },
     );
 

@@ -512,6 +512,12 @@ message FindRequest {
   // Full-text search query string. When set, results are ranked by relevance
   // against the collection's full-text search index.
   optional string search = 12;
+
+  // When true, returns only soft-deleted documents (trash view).
+  // Only effective on collections with `soft_delete = true`.
+  // Auth: `access.trash` is evaluated instead of `access.read`.
+  // Defaults to false — soft-deleted documents are excluded.
+  optional bool trash = 13;
 }
 
 // PaginationInfo carries pagination state returned alongside every Find response.
@@ -588,6 +594,11 @@ message FindByIDRequest {
   // When true, loads the latest draft version snapshot instead of the published
   // document (only applicable to collections with drafts and versions enabled).
   optional bool draft = 6;
+
+  // When true, allows finding a soft-deleted document by ID.
+  // Only effective on collections with `soft_delete = true`.
+  // Auth: `access.trash` is evaluated (falls back to `access.update`).
+  optional bool trash = 7;
 }
 
 // FindByIDResponse wraps the returned document. When no document exists for
