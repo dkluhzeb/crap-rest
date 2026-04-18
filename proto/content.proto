@@ -72,6 +72,20 @@ service ContentAPI {
   //   UNAVAILABLE       — transient DB error; retry
   rpc Create (CreateRequest) returns (CreateResponse);
 
+  // CreateMany bulk-creates multiple documents in a single call.
+  // Documents are created in batched transactions (500 per batch).
+  // Fires per-document before_validate / after_change hooks by default.
+  // Set hooks=false to skip hooks for performance on large batch operations.
+  //
+  // Auth: optional. Create access is evaluated per document.
+  //
+  // Errors:
+  //   NOT_FOUND         — collection slug not registered
+  //   PERMISSION_DENIED — create access denied
+  //   INVALID_ARGUMENT  — validation error
+  //   UNAVAILABLE       — transient DB error; retry
+  rpc CreateMany (CreateManyRequest) returns (CreateManyResponse);
+
   // Update modifies an existing document by ID and fires the full write hook
   // lifecycle inside a single transaction.
   //
@@ -630,6 +644,34 @@ message CreateRequest {
 message CreateResponse {
   // The created document, including server-assigned ID and timestamps.
   Document document = 1;
+}
+
+// CreateManyRequest bulk-creates multiple documents.
+message CreateManyRequest {
+  // The collection slug.
+  string collection = 1;
+
+  // List of documents to create. Each item is a protobuf Struct with field values.
+  repeated google.protobuf.Struct documents = 2;
+
+  // BCP-47 locale for localized field writes.
+  optional string locale = 3;
+
+  // When true, saves documents as drafts. Defaults to false.
+  optional bool draft = 4;
+
+  // Run per-document lifecycle hooks.
+  // Default: true. Set to false to skip for performance.
+  optional bool hooks = 5;
+}
+
+// CreateManyResponse reports the number of documents created.
+message CreateManyResponse {
+  // Number of documents created.
+  int64 created = 1;
+
+  // The created documents with server-assigned IDs.
+  repeated Document documents = 2;
 }
 
 // UpdateRequest modifies an existing document.

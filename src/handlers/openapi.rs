@@ -320,6 +320,51 @@ async fn generate_spec(client: &GrpcClient, config: &OpenApiConfig) -> anyhow::R
         paths.insert(
             bulk_path,
             json!({
+                "post": {
+                    "summary": format!("Bulk create {plural}"),
+                    "operationId": format!("create_many_{slug}"),
+                    "tags": [slug],
+                    "requestBody": {
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["documents"],
+                                    "properties": {
+                                        "documents": {
+                                            "type": "array",
+                                            "items": input_ref,
+                                            "description": "List of documents to create"
+                                        },
+                                        "locale": { "type": "string" },
+                                        "draft": { "type": "boolean" },
+                                        "hooks": { "type": "boolean", "description": "Run lifecycle hooks (default: true)" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Bulk create result",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "created": { "type": "integer" },
+                                            "documents": {
+                                                "type": "array",
+                                                "items": schema_ref
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 "patch": {
                     "summary": format!("Bulk update {plural}"),
                     "operationId": format!("update_many_{slug}"),

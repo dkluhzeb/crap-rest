@@ -40,6 +40,7 @@ pub fn routes() -> Router<AppState> {
         .route("/collections/{slug}/{id}", delete(delete_doc))
         .route("/collections/{slug}/{id}/undelete", post(undelete))
         .route("/collections/{slug}/validate", post(validate))
+        .route("/collections/{slug}/bulk", post(create_many))
         .route("/collections/{slug}/bulk", patch(update_many))
         .route("/collections/{slug}/bulk", delete(delete_many))
 }
@@ -292,6 +293,41 @@ async fn validate(
     Ok(Json(serde_json::json!({
         "valid": resp.valid,
         "errors": resp.errors,
+    })))
+}
+
+async fn create_many(
+    State(client): State<GrpcClient>,
+    Path(slug): Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> RestResult<Json<Value>> {
+    let documents = body
+        .get("documents")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(json_to_struct).collect())
+        .unwrap_or_default();
+
+    let req = make_request(
+        &headers,
+        proto::CreateManyRequest {
+            collection: slug,
+            documents,
+            locale: body
+                .get("locale")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            draft: body.get("draft").and_then(|v| v.as_bool()),
+            hooks: body.get("hooks").and_then(|v| v.as_bool()),
+        },
+    );
+
+    let resp = client.client().create_many(req).await?.into_inner();
+    let docs: Vec<Value> = resp.documents.iter().map(document_to_json).collect();
+
+    Ok(Json(serde_json::json!({
+        "created": resp.created,
+        "documents": docs,
     })))
 }
 
